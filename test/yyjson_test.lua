@@ -21,6 +21,10 @@ function testcase.encode_decode()
             exp = '1',
         },
         {
+            val = -567,
+            exp = '-567',
+        },
+        {
             val = 1.05,
             exp = '1.05',
         },

@@ -284,9 +284,10 @@ static inline yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L,
                 if (lauxh_isinteger(L, -2) && (i = lua_tointeger(L, -2)) > 0 &&
                     (val = tovalue(doc, L, lua_gettop(L)))) {
                     if (i < prev) {
-                        yyjson_mut_arr_insert(bin, val, (size_t)i);
+                        yyjson_mut_arr_insert(bin, val, (size_t)i - 1);
                     } else {
                         lua_Integer skip = i - prev;
+                        // fill spaces
                         for (lua_Integer n = 1; n < skip; n++) {
                             yyjson_mut_arr_append(bin, yyjson_mut_null(doc));
                         }
