@@ -57,7 +57,7 @@ static void *malloc_lua(void *ctx, size_t size)
 }
 
 /* Same as libc's realloc(), should not be NULL. */
-void *realloc_lua(void *ctx, void *ptr, size_t size)
+static void *realloc_lua(void *ctx, void *ptr, size_t size)
 {
     memalloc_t *m = (memalloc_t *)ctx;
     lua_State *L  = m->th;
@@ -91,7 +91,7 @@ void *realloc_lua(void *ctx, void *ptr, size_t size)
 }
 
 /* Same as libc's free(), should not be NULL. */
-void free_lua(void *ctx, void *ptr)
+static void free_lua(void *ctx, void *ptr)
 {
     memalloc_t *m = (memalloc_t *)ctx;
     lua_State *L  = m->th;
@@ -129,6 +129,11 @@ static void memalloc_dispose(memalloc_t *m)
 {
     lauxh_unref(m->L, m->ref);
 }
+
+static void *AS_OBJECT   = NULL;
+static void *AS_ARRAY    = NULL;
+static int AS_OBJECT_REF = LUA_NOREF;
+static int AS_ARRAY_REF  = LUA_NOREF;
 
 static int pushvalue(lua_State *L, yyjson_val *val)
 {
@@ -172,6 +177,8 @@ static int pushvalue(lua_State *L, yyjson_val *val)
             return 2;
         }
         lua_createtable(L, it.max, 0);
+        lauxh_pushref(L, AS_ARRAY_REF);
+        lua_rawseti(L, -2, -1);
         while ((val = yyjson_arr_iter_next(&it))) {
             if ((rc = pushvalue(L, val)) > 1) {
                 return rc;
@@ -194,6 +201,8 @@ static int pushvalue(lua_State *L, yyjson_val *val)
             return 2;
         }
         lua_createtable(L, 0, it.max);
+        lauxh_pushref(L, AS_OBJECT_REF);
+        lua_rawseti(L, -2, -1);
         while ((key = yyjson_obj_iter_next(&it))) {
             val = yyjson_obj_iter_get_val(key);
             if ((rc = pushvalue(L, val)) > 1) {
@@ -242,8 +251,7 @@ static int decode_lua(lua_State *L)
     return rc;
 }
 
-static inline yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L,
-                                      int idx)
+static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, int idx)
 {
     switch (lua_type(L, idx)) {
     case LUA_TNIL:
@@ -269,13 +277,28 @@ static inline yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L,
     }
 
     case LUA_TTABLE: {
-        size_t len          = lauxh_rawlen(L, idx);
         yyjson_mut_val *bin = NULL;
 
+        // if the -1st element of a table is AS_ARRAY or AS_OBJECT, the table is
+        // treated as that data type.
+        lua_rawgeti(L, idx, -1);
+        if (lua_type(L, -1) == LUA_TUSERDATA) {
+            const void *ptr = lua_topointer(L, -1);
+            lua_pop(L, 1);
+            if (ptr == AS_OBJECT) {
+                goto TREAT_AS_OBJECT;
+            } else if (ptr == AS_ARRAY) {
+                goto TREAT_AS_ARRAY;
+            }
+        }
+        lua_pop(L, 1);
+
         // as array
-        if (len) {
+        if (lauxh_rawlen(L, idx)) {
             lua_Integer prev = 0;
-            bin              = yyjson_mut_arr(doc);
+
+TREAT_AS_ARRAY:
+            bin = yyjson_mut_arr(doc);
             lua_pushnil(L);
             while (lua_next(L, idx) != 0) {
                 lua_Integer i       = 0;
@@ -300,6 +323,7 @@ static inline yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L,
             return bin;
         }
 
+TREAT_AS_OBJECT:
         // as object
         bin = yyjson_mut_obj(doc);
         lua_pushnil(L);
@@ -364,9 +388,52 @@ static int encode_lua(lua_State *L)
     return rc;
 }
 
+#define AS_OBJECT_MT "yyjson.as_object"
+#define AS_ARRAY_MT  "yyjson.as_array"
+
+#define tostring_lua(L, tname)                                                 \
+ do {                                                                          \
+  lauxh_isuserdataof((L), 1, (tname));                                         \
+  lua_pushliteral((L), tname);                                                 \
+ } while (0)
+
+static int object_tostring_lua(lua_State *L)
+{
+    tostring_lua(L, AS_OBJECT_MT);
+    return 1;
+}
+
+static int array_tostring_lua(lua_State *L)
+{
+    tostring_lua(L, AS_ARRAY_MT);
+    return 1;
+}
+
 LUALIB_API int luaopen_yyjson(lua_State *L)
 {
+    // create auxiliary object metatables
+    luaL_newmetatable(L, AS_OBJECT_MT);
+    lauxh_pushfn2tbl(L, "__tostring", object_tostring_lua);
+    lua_pop(L, 1);
+    luaL_newmetatable(L, AS_ARRAY_MT);
+    lauxh_pushfn2tbl(L, "__tostring", array_tostring_lua);
+    lua_pop(L, 1);
+
     lua_createtable(L, 0, 2);
+    // export symbols
+    AS_OBJECT = lua_newuserdata(L, 0);
+    lauxh_setmetatable(L, AS_OBJECT_MT);
+    AS_OBJECT_REF = lauxh_ref(L);
+    lauxh_pushref(L, AS_OBJECT_REF);
+    lua_setfield(L, -2, "AS_OBJECT");
+
+    AS_ARRAY = lua_newuserdata(L, 0);
+    lauxh_setmetatable(L, AS_ARRAY_MT);
+    AS_ARRAY_REF = lauxh_ref(L);
+    lauxh_pushref(L, AS_ARRAY_REF);
+    lua_setfield(L, -2, "AS_ARRAY");
+
+    // export functions
     lauxh_pushfn2tbl(L, "encode", encode_lua);
     lauxh_pushfn2tbl(L, "decode", decode_lua);
 

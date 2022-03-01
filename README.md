@@ -3,7 +3,7 @@
 [![test](https://github.com/mah0x211/lua-yyjson/actions/workflows/test.yml/badge.svg)](https://github.com/mah0x211/lua-yyjson/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/mah0x211/lua-yyjson/branch/master/graph/badge.svg)](https://codecov.io/gh/mah0x211/lua-yyjson)
 
-lua bindings for yyjson.
+lua bindings for https://github.com/ibireme/yyjson.
 
 
 ## Installation
@@ -16,15 +16,35 @@ luarocks install yyjson
 ## Usage
 
 ```lua
-local dump = require('dump')
 local yyjson = require('yyjson')
+local dump = require('dump')
 
 -- treat table as an object if it contains only key/value pairs
 local s = assert(yyjson.encode({
     hello = 'world',
     qux = 'quux',
 }))
+print(s) -- {"hello":"world","qux":"quux"}
 
+-- treat table as an array if the -1st element of a table is yyjson.AS_ARRAY
+s = assert(yyjson.encode({
+    [-1] = yyjson.AS_ARRAY,
+    hello = 'world',
+    qux = 'quux',
+}))
+print(s) -- []
+
+-- treat table as an object if the -1st element of a table is yyjson.AS_OBJECT
+s = assert(yyjson.encode({
+    [-1] = yyjson.AS_OBJECT,
+    'foo',
+    hello = 'world',
+    'bar',
+    nil,
+    qux = 'quux',
+    nil,
+    'baz',
+}))
 print(s) -- {"hello":"world","qux":"quux"}
 
 -- treat table as an array if #table > 0
@@ -43,11 +63,17 @@ print(s) -- ["foo","bar",null,null,"baz"]
 local v = assert(yyjson.decode(s))
 print(dump(v))
 -- {
+--     [-1] = "yyjson.as_array",
 --     [1] = "foo",
 --     [2] = "bar",
 --     [5] = "baz"
 -- }
 ```
+
+## About Memory Allocation
+
+`lua-yyjson` uses the `lua_Alloc` function to allocate memory.  
+Therefore, the amount of memory available depends on the `lua_Alloc` function associated with `lua_State*`.
 
 ## s, err, errno = yyjson.encode( v [, ...])
 
@@ -80,6 +106,13 @@ encode a Lua value `v` to a JSON string.
     - `yyjson.WRITE_ERROR_FILE_OPEN`: Failed to open a file.
     - `yyjson.WRITE_ERROR_FILE_WRITE`: Failed to write a file.
 
+**NOTE:** 
+
+The `table` value will be handling as follows;
+
+- if the `-1st` element is `yyjson.AS_OBJECT`, treat table as an object.
+- if the `-1st` element is `yyjson.AS_ARRAY`, treat table as an array.
+- if the length of table (#table) is greater than 0, treat table as an array.
 
 ## v, err, errno = yyjson.decode( s [, ...])
 
