@@ -72,3 +72,27 @@ function testcase.encode_decode()
     end
 end
 
+function testcase.decode_insitu()
+    -- test that decode value with READ_INSITU flag
+    local exp = {
+        baz = {
+            qux = {
+                true,
+                false,
+                1,
+                1.05,
+                nil,
+                'hello',
+                {
+                    foo = 'bar',
+                },
+            },
+        },
+    }
+    local s =
+        '{"baz":{"qux":[true,false,1,1.05,null,"hello",{"foo":"bar"}]}}' ..
+            string.rep(string.char(0), yyjson.PADDING_SIZE)
+    local act = assert(yyjson.decode(s, yyjson.READ_INSITU))
+    assert.equal(act, exp)
+end
+

@@ -225,6 +225,9 @@ static int decode_lua(lua_State *L)
 
     lua_settop(L, 1);
     memalloc_init(&m, L);
+    if (flg & YYJSON_READ_INSITU) {
+        len -= YYJSON_PADDING_SIZE;
+    }
     doc = yyjson_read_opts((char *)str, len, flg, &m.alc, &err);
     if (doc) {
         rc = pushvalue(L, yyjson_doc_get_root(doc));
@@ -383,6 +386,7 @@ LUALIB_API int luaopen_yyjson(lua_State *L)
        be padded by at least `YYJSON_PADDING_SIZE` byte. For example: "[1,2]"
        should be "[1,2]\0\0\0\0", length should be 5. */
     lauxh_pushint2tbl(L, "READ_INSITU", YYJSON_READ_INSITU);
+    lauxh_pushint2tbl(L, "PADDING_SIZE", YYJSON_PADDING_SIZE);
     /** Stop when done instead of issues an error if there's additional content
         after a JSON document. This option may used to parse small pieces of
        JSON in larger data, such as NDJSON. */
