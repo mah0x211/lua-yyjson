@@ -1,8 +1,9 @@
 rockspec_format = "3.0"
 package = "yyjson"
-version = "scm-1"
+version = "0.4.0-1"
 source = {
-    url = "git+https://github.com/mah0x211/lua-yyjson.git"
+    url = "git+https://github.com/mah0x211/lua-yyjson.git",
+    tag = "v0.4.0",
 }
 description = {
     summary = "lua bindings for yyjson.",
