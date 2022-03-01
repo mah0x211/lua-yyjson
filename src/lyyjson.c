@@ -24,6 +24,112 @@
 #include "yyjson.h"
 #include <lauxhlib.h>
 
+typedef struct {
+    lua_State *L;
+    int ref;
+    lua_State *th;
+    lua_Alloc fn;
+    void *ud;
+    yyjson_alc alc;
+} memalloc_t;
+
+/* Same as libc's malloc(), should not be NULL. */
+static void *malloc_lua(void *ctx, size_t size)
+{
+    memalloc_t *m = (memalloc_t *)ctx;
+    lua_State *L  = m->th;
+    void *ptr     = m->fn(m->ud, NULL, 0, size);
+
+    if (ptr) {
+        // keep alloc size
+        // buffer for hexadecimal string 0xFFFFFFFFFFFFFFFF
+        char b[20]  = {0};
+        size_t blen = snprintf(b, sizeof(b), "%p", ptr);
+        size_t *sz  = NULL;
+
+        lua_pushlstring(L, b, blen);
+        sz  = (size_t *)lua_newuserdata(L, sizeof(size_t));
+        *sz = size;
+        lua_rawset(L, 1);
+    }
+
+    return ptr;
+}
+
+/* Same as libc's realloc(), should not be NULL. */
+void *realloc_lua(void *ctx, void *ptr, size_t size)
+{
+    memalloc_t *m = (memalloc_t *)ctx;
+    lua_State *L  = m->th;
+    char b[20]    = {0};
+    size_t blen   = snprintf(b, sizeof(b), "%p", ptr);
+    size_t *sz    = NULL;
+    void *newptr  = NULL;
+
+    // get alloc size
+    lua_pushlstring(L, b, blen);
+    lua_pushvalue(L, 2);
+    lua_rawget(L, 1);
+    sz     = (size_t *)lua_topointer(L, -1);
+    // realloc
+    newptr = m->fn(m->ud, ptr, *sz, size);
+    if (newptr) {
+        // remove old alloc size
+        lua_pushvalue(L, 2);
+        lua_pushnil(L);
+        lua_rawset(L, 1);
+
+        // keep new alloc size
+        *sz  = size;
+        blen = snprintf(b, sizeof(b), "%p", newptr);
+        lua_pushlstring(L, b, blen);
+        lua_replace(L, 2);
+        lua_rawset(L, 1);
+    }
+
+    return newptr;
+}
+
+/* Same as libc's free(), should not be NULL. */
+void free_lua(void *ctx, void *ptr)
+{
+    memalloc_t *m = (memalloc_t *)ctx;
+    lua_State *L  = m->th;
+    char b[20]    = {0};
+    size_t blen   = snprintf(b, sizeof(b), "%p", ptr);
+    size_t size   = 0;
+
+    // get alloc size
+    lua_pushlstring(L, b, blen);
+    lua_pushvalue(L, 2);
+    lua_rawget(L, 1);
+    size = *(size_t *)lua_topointer(L, -1);
+    lua_pop(L, 1);
+    // remove alloc size
+    lua_pushnil(L);
+    lua_rawset(L, 1);
+    // free
+    m->fn(m->ud, ptr, size, 0);
+}
+
+static void memalloc_init(memalloc_t *m, lua_State *L)
+{
+    m->L   = L;
+    m->fn  = lua_getallocf(L, &m->ud);
+    m->th  = lua_newthread(L);
+    m->ref = lauxh_ref(L);
+    lua_newtable(m->th);
+    m->alc.malloc  = malloc_lua;
+    m->alc.realloc = realloc_lua;
+    m->alc.free    = free_lua;
+    m->alc.ctx     = (void *)m;
+}
+
+static void memalloc_dispose(memalloc_t *m)
+{
+    lauxh_unref(m->L, m->ref);
+}
+
 static int pushvalue(lua_State *L, yyjson_val *val)
 {
     switch (yyjson_get_type(val)) {
@@ -114,18 +220,23 @@ static int decode_lua(lua_State *L)
     yyjson_read_flag flg = lauxh_optflags(L, 2);
     yyjson_read_err err  = {0};
     yyjson_doc *doc      = NULL;
+    memalloc_t m         = {0};
+    int rc               = 3;
 
     lua_settop(L, 1);
-    if ((doc = yyjson_read_opts((char *)str, len, flg, NULL, &err))) {
-        int rc = pushvalue(L, yyjson_doc_get_root(doc));
+    memalloc_init(&m, L);
+    doc = yyjson_read_opts((char *)str, len, flg, &m.alc, &err);
+    if (doc) {
+        rc = pushvalue(L, yyjson_doc_get_root(doc));
         yyjson_doc_free(doc);
-        return rc;
+    } else {
+        lua_pushnil(L);
+        lua_pushfstring(L, "%s at %d", err.msg, err.pos);
+        lua_pushinteger(L, err.code);
     }
+    memalloc_dispose(&m);
 
-    lua_pushnil(L);
-    lua_pushfstring(L, "%s at %d", err.msg, err.pos);
-    lua_pushinteger(L, err.code);
-    return 3;
+    return rc;
 }
 
 static inline yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L,
@@ -218,11 +329,14 @@ static int encode_lua(lua_State *L)
     yyjson_mut_val *val  = NULL;
     size_t len           = 0;
     const char *str      = NULL;
+    memalloc_t m         = {0};
+    int rc               = 3;
 
     luaL_checkany(L, 1);
     flg = lauxh_optflags(L, 2);
-    doc = yyjson_mut_doc_new(NULL);
 
+    memalloc_init(&m, L);
+    doc = yyjson_mut_doc_new(&m.alc);
     lua_settop(L, 1);
     val = tovalue(doc, L, 1);
     if (!val) {
@@ -236,13 +350,14 @@ static int encode_lua(lua_State *L)
         lua_pushnil(L);
         lua_pushstring(L, err.msg);
         lua_pushinteger(L, err.code);
-        yyjson_mut_doc_free(doc);
-        return 3;
+    } else {
+        lua_pushlstring(L, str, len);
+        rc = 1;
     }
-
-    lua_pushlstring(L, str, len);
     yyjson_mut_doc_free(doc);
-    return 1;
+    memalloc_dispose(&m);
+
+    return rc;
 }
 
 LUALIB_API int luaopen_yyjson(lua_State *L)
