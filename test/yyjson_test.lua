@@ -38,6 +38,7 @@ function testcase.encode_decode()
         },
         {
             val = {
+                [-1] = yyjson.AS_ARRAY,
                 true,
                 false,
                 1,
@@ -49,8 +50,11 @@ function testcase.encode_decode()
         },
         {
             val = {
+                [-1] = yyjson.AS_OBJECT,
                 baz = {
+                    [-1] = yyjson.AS_OBJECT,
                     qux = {
+                        [-1] = yyjson.AS_ARRAY,
                         true,
                         false,
                         1,
@@ -58,6 +62,7 @@ function testcase.encode_decode()
                         nil,
                         'hello',
                         {
+                            [-1] = yyjson.AS_OBJECT,
                             foo = 'bar',
                         },
                     },
@@ -79,8 +84,11 @@ end
 function testcase.decode_insitu()
     -- test that decode value with READ_INSITU flag
     local exp = {
+        [-1] = yyjson.AS_OBJECT,
         baz = {
+            [-1] = yyjson.AS_OBJECT,
             qux = {
+                [-1] = yyjson.AS_ARRAY,
                 true,
                 false,
                 1,
@@ -88,6 +96,7 @@ function testcase.decode_insitu()
                 nil,
                 'hello',
                 {
+                    [-1] = yyjson.AS_OBJECT,
                     foo = 'bar',
                 },
             },
