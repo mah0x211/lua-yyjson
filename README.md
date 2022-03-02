@@ -68,6 +68,18 @@ print(dump(v))
 --     [2] = "bar",
 --     [5] = "baz"
 -- }
+
+-- null elements are decoded to yyjson.NULL
+v = assert(yyjson.decode(s, true))
+print(dump(v))
+-- {
+--     [-1] = "yyjson.as_array",
+--     [1] = "foo",
+--     [2] = "bar",
+--     [3] = "yyjson.null",
+--     [4] = "yyjson.null",
+--     [5] = "baz"
+-- }
 ```
 
 ## About Memory Allocation
@@ -75,13 +87,15 @@ print(dump(v))
 `lua-yyjson` uses the `lua_Alloc` function to allocate memory.  
 Therefore, the amount of memory available depends on the `lua_Alloc` function associated with `lua_State*`.
 
-## s, err, errno = yyjson.encode( v [, ...])
+
+## s, err, errno = yyjson.encode( v [, mlimit [, ...]])
 
 encode a Lua value `v` to a JSON string.
 
 **Parameters**
 
 - `v:boolean|string|number|table`: a value to encode to a JSON string.
+- `mlimit:integer`: if a value greater than `0` is specified, the maximum memory usage is limited to this value.
 - `...integer`: the following flags can be specified;
     - `yyjson.WRITE_NOFLAG`: default flag:
         - Write JSON minify.
@@ -112,15 +126,18 @@ The `table` value will be handling as follows;
 
 - if the `-1st` element is `yyjson.AS_OBJECT`, treat table as an object.
 - if the `-1st` element is `yyjson.AS_ARRAY`, treat table as an array.
-- if the length of table (#table) is greater than 0, treat table as an array.
+- if the length of table (`#table`) is greater than `0`, treat table as an array.
 
-## v, err, errno = yyjson.decode( s [, ...])
+
+## v, err, errno = yyjson.decode( s [, with_null [, mlimit [, ...]]])
 
 decode a JSON string `s` to a Lua value.
 
 **Parameters**
 
 - `s:string`: a JSON string.
+- `with_null:boolean`: decode a `null` to `yyjson.NULL`.
+- `mlimit:integer`: if a value greater than `0` is specified, the maximum memory usage is limited to this value.
 - `...:integer`: the following flags can be specified;
     - `yyjson.READ_NOFLAG`: default flag (RFC 8259 compliant):
         - Read positive integer as `uint64_t`.

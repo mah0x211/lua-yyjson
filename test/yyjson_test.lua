@@ -105,7 +105,76 @@ function testcase.decode_insitu()
     local s =
         '{"baz":{"qux":[true,false,1,1.05,null,"hello",{"foo":"bar"}]}}' ..
             string.rep(string.char(0), yyjson.PADDING_SIZE)
-    local act = assert(yyjson.decode(s, yyjson.READ_INSITU))
+    local act = assert(yyjson.decode(s, nil, nil, yyjson.READ_INSITU))
     assert.equal(act, exp)
 end
 
+function testcase.encode_null()
+    -- test that encode yyjson.NULL value to null
+    local exp = {
+        [-1] = yyjson.AS_OBJECT,
+        foo = yyjson.NULL,
+        bar = {
+            [-1] = yyjson.AS_ARRAY,
+            true,
+            yyjson.NULL,
+            'hello',
+            {
+                [-1] = yyjson.AS_OBJECT,
+                baz = 'qux',
+            },
+        },
+    }
+    local s = assert(yyjson.encode(exp))
+    local act = assert(yyjson.decode(s, true))
+    assert.equal(act, exp)
+end
+
+function testcase.decode_null()
+    -- test that decode null value to yyjson.NULL
+    local exp = {
+        [-1] = yyjson.AS_OBJECT,
+        foo = yyjson.NULL,
+        bar = {
+            [-1] = yyjson.AS_ARRAY,
+            true,
+            yyjson.NULL,
+            'hello',
+            {
+                [-1] = yyjson.AS_OBJECT,
+                baz = 'qux',
+            },
+        },
+    }
+    local s = '{"foo": null, "bar":[true,null,"hello",{"baz":"qux"}]}'
+    local act = assert(yyjson.decode(s, true))
+    assert.equal(act, exp)
+end
+
+function testcase.memory_limit()
+    -- test that limit memory usage for encoding
+    local v, err, errno = yyjson.encode({
+        [-1] = yyjson.AS_OBJECT,
+        foo = yyjson.NULL,
+        bar = {
+            [-1] = yyjson.AS_ARRAY,
+            true,
+            yyjson.NULL,
+            'hello',
+            {
+                [-1] = yyjson.AS_OBJECT,
+                baz = 'qux',
+            },
+        },
+    }, 200)
+    assert.is_nil(v)
+    assert.match(err, 'memory')
+    assert.equal(errno, yyjson.WRITE_ERROR_MEMORY_ALLOCATION)
+
+    -- test that limit memory usage for dencoding
+    local s = '{"foo": null, "bar":[true,null,"hello",{"baz":"qux"}]}'
+    v, err, errno = yyjson.decode(s, nil, 100)
+    assert.is_nil(v)
+    assert.match(err, 'memory')
+    assert.equal(errno, yyjson.READ_ERROR_MEMORY_ALLOCATION)
+end
