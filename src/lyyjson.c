@@ -130,16 +130,72 @@ static void memalloc_dispose(memalloc_t *m)
     lauxh_unref(m->L, m->ref);
 }
 
+#define AS_OBJECT_MT "yyjson.as_object"
+#define AS_ARRAY_MT  "yyjson.as_array"
+#define AS_NULL_MT   "yyjson.null"
+
 static void *AS_OBJECT   = NULL;
 static void *AS_ARRAY    = NULL;
+static void *AS_NULL     = NULL;
 static int AS_OBJECT_REF = LUA_NOREF;
 static int AS_ARRAY_REF  = LUA_NOREF;
+static int AS_NULL_REF   = LUA_NOREF;
 
-static int pushvalue(lua_State *L, yyjson_val *val)
+#define tostring_lua(L, tname)                                                 \
+ do {                                                                          \
+  lauxh_isuserdataof((L), 1, (tname));                                         \
+  lua_pushliteral((L), tname);                                                 \
+ } while (0)
+
+static int object_tostring_lua(lua_State *L)
+{
+    tostring_lua(L, AS_OBJECT_MT);
+    return 1;
+}
+
+static int array_tostring_lua(lua_State *L)
+{
+    tostring_lua(L, AS_ARRAY_MT);
+    return 1;
+}
+
+static int null_tostring_lua(lua_State *L)
+{
+    tostring_lua(L, AS_NULL_MT);
+    return 1;
+}
+
+static inline void init_aux_objects(lua_State *L)
+{
+    // create auxiliary object metatables
+    AS_OBJECT = lua_newuserdata(L, 0);
+    luaL_newmetatable(L, AS_OBJECT_MT);
+    lauxh_pushfn2tbl(L, "__tostring", object_tostring_lua);
+    lua_setmetatable(L, -2);
+    AS_OBJECT_REF = lauxh_ref(L);
+
+    AS_ARRAY = lua_newuserdata(L, 0);
+    luaL_newmetatable(L, AS_ARRAY_MT);
+    lauxh_pushfn2tbl(L, "__tostring", array_tostring_lua);
+    lua_setmetatable(L, -2);
+    AS_ARRAY_REF = lauxh_ref(L);
+
+    AS_NULL = lua_newuserdata(L, 0);
+    luaL_newmetatable(L, AS_NULL_MT);
+    lauxh_pushfn2tbl(L, "__tostring", null_tostring_lua);
+    lua_setmetatable(L, -2);
+    AS_NULL_REF = lauxh_ref(L);
+}
+
+static int pushvalue(lua_State *L, yyjson_val *val, int with_null)
 {
     switch (yyjson_get_type(val)) {
-    case YYJSON_TYPE_NONE:
     case YYJSON_TYPE_NULL:
+        if (with_null) {
+            lauxh_pushref(L, AS_NULL_REF);
+            return 1;
+        }
+    case YYJSON_TYPE_NONE:
         lua_pushnil(L);
         return 1;
 
@@ -180,7 +236,7 @@ static int pushvalue(lua_State *L, yyjson_val *val)
         lauxh_pushref(L, AS_ARRAY_REF);
         lua_rawseti(L, -2, -1);
         while ((val = yyjson_arr_iter_next(&it))) {
-            if ((rc = pushvalue(L, val)) > 1) {
+            if ((rc = pushvalue(L, val, with_null)) > 1) {
                 return rc;
             }
             lua_rawseti(L, -2, it.idx);
@@ -205,7 +261,7 @@ static int pushvalue(lua_State *L, yyjson_val *val)
         lua_rawseti(L, -2, -1);
         while ((key = yyjson_obj_iter_next(&it))) {
             val = yyjson_obj_iter_get_val(key);
-            if ((rc = pushvalue(L, val)) > 1) {
+            if ((rc = pushvalue(L, val, with_null)) > 1) {
                 return rc;
             }
             lua_setfield(L, -2, yyjson_get_str(key));
@@ -226,7 +282,8 @@ static int decode_lua(lua_State *L)
 {
     size_t len           = 0;
     const char *str      = lauxh_checklstring(L, 1, &len);
-    yyjson_read_flag flg = lauxh_optflags(L, 2);
+    int with_null        = lauxh_optboolean(L, 2, 0);
+    yyjson_read_flag flg = lauxh_optflags(L, 3);
     yyjson_read_err err  = {0};
     yyjson_doc *doc      = NULL;
     memalloc_t m         = {0};
@@ -239,7 +296,7 @@ static int decode_lua(lua_State *L)
     }
     doc = yyjson_read_opts((char *)str, len, flg, &m.alc, &err);
     if (doc) {
-        rc = pushvalue(L, yyjson_doc_get_root(doc));
+        rc = pushvalue(L, yyjson_doc_get_root(doc), with_null);
         yyjson_doc_free(doc);
     } else {
         lua_pushnil(L);
@@ -340,9 +397,13 @@ TREAT_AS_OBJECT:
         return bin;
     }
 
+    case LUA_TUSERDATA:
+        if (lauxh_isuserdataof(L, idx, AS_NULL_MT)) {
+            return yyjson_mut_null(doc);
+        }
+
     // case LUA_TLIGHTUSERDATA:
     // case LUA_TFUNCTION:
-    // case LUA_TUSERDATA:
     // case LUA_TTHREAD:
     default:
         return NULL;
@@ -388,50 +449,20 @@ static int encode_lua(lua_State *L)
     return rc;
 }
 
-#define AS_OBJECT_MT "yyjson.as_object"
-#define AS_ARRAY_MT  "yyjson.as_array"
-
-#define tostring_lua(L, tname)                                                 \
- do {                                                                          \
-  lauxh_isuserdataof((L), 1, (tname));                                         \
-  lua_pushliteral((L), tname);                                                 \
- } while (0)
-
-static int object_tostring_lua(lua_State *L)
-{
-    tostring_lua(L, AS_OBJECT_MT);
-    return 1;
-}
-
-static int array_tostring_lua(lua_State *L)
-{
-    tostring_lua(L, AS_ARRAY_MT);
-    return 1;
-}
-
 LUALIB_API int luaopen_yyjson(lua_State *L)
 {
-    // create auxiliary object metatables
-    luaL_newmetatable(L, AS_OBJECT_MT);
-    lauxh_pushfn2tbl(L, "__tostring", object_tostring_lua);
-    lua_pop(L, 1);
-    luaL_newmetatable(L, AS_ARRAY_MT);
-    lauxh_pushfn2tbl(L, "__tostring", array_tostring_lua);
-    lua_pop(L, 1);
+    init_aux_objects(L);
 
     lua_createtable(L, 0, 2);
     // export symbols
-    AS_OBJECT = lua_newuserdata(L, 0);
-    lauxh_setmetatable(L, AS_OBJECT_MT);
-    AS_OBJECT_REF = lauxh_ref(L);
     lauxh_pushref(L, AS_OBJECT_REF);
     lua_setfield(L, -2, "AS_OBJECT");
 
-    AS_ARRAY = lua_newuserdata(L, 0);
-    lauxh_setmetatable(L, AS_ARRAY_MT);
-    AS_ARRAY_REF = lauxh_ref(L);
     lauxh_pushref(L, AS_ARRAY_REF);
     lua_setfield(L, -2, "AS_ARRAY");
+
+    lauxh_pushref(L, AS_NULL_REF);
+    lua_setfield(L, -2, "NULL");
 
     // export functions
     lauxh_pushfn2tbl(L, "encode", encode_lua);
