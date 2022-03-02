@@ -31,6 +31,9 @@ typedef struct {
     lua_Alloc fn;
     void *ud;
     yyjson_alc alc;
+    size_t usesize;
+    size_t maxsize;
+    int nomem;
 } memalloc_t;
 
 /* Same as libc's malloc(), should not be NULL. */
@@ -38,8 +41,16 @@ static void *malloc_lua(void *ctx, size_t size)
 {
     memalloc_t *m = (memalloc_t *)ctx;
     lua_State *L  = m->th;
-    void *ptr     = m->fn(m->ud, NULL, 0, size);
+    void *ptr     = NULL;
 
+    if (m->maxsize &&
+        (SIZE_MAX - size < m->usesize || size + m->usesize > m->maxsize)) {
+        // reached to maximum memory limit
+        m->nomem = 1;
+        return NULL;
+    }
+
+    ptr = m->fn(m->ud, NULL, 0, size);
     if (ptr) {
         // keep alloc size
         // buffer for hexadecimal string 0xFFFFFFFFFFFFFFFF
@@ -47,10 +58,13 @@ static void *malloc_lua(void *ctx, size_t size)
         size_t blen = snprintf(b, sizeof(b), "%p", ptr);
         size_t *sz  = NULL;
 
+        m->usesize += size;
         lua_pushlstring(L, b, blen);
         sz  = (size_t *)lua_newuserdata(L, sizeof(size_t));
         *sz = size;
         lua_rawset(L, 1);
+    } else {
+        m->nomem = 1;
     }
 
     return ptr;
@@ -62,11 +76,19 @@ static void *realloc_lua(void *ctx, void *ptr, size_t size)
     memalloc_t *m = (memalloc_t *)ctx;
     lua_State *L  = m->th;
     char b[20]    = {0};
-    size_t blen   = snprintf(b, sizeof(b), "%p", ptr);
+    size_t blen   = 0;
     size_t *sz    = NULL;
     void *newptr  = NULL;
 
+    if (m->maxsize &&
+        (SIZE_MAX - size < m->usesize || size + m->usesize > m->maxsize)) {
+        // reached to maximum memory limit
+        m->nomem = 1;
+        return NULL;
+    }
+
     // get alloc size
+    blen = snprintf(b, sizeof(b), "%p", ptr);
     lua_pushlstring(L, b, blen);
     lua_pushvalue(L, 2);
     lua_rawget(L, 1);
@@ -80,11 +102,14 @@ static void *realloc_lua(void *ctx, void *ptr, size_t size)
         lua_rawset(L, 1);
 
         // keep new alloc size
-        *sz  = size;
-        blen = snprintf(b, sizeof(b), "%p", newptr);
+        m->usesize = m->usesize - *sz + size;
+        *sz        = size;
+        blen       = snprintf(b, sizeof(b), "%p", newptr);
         lua_pushlstring(L, b, blen);
         lua_replace(L, 2);
         lua_rawset(L, 1);
+    } else {
+        m->nomem = 1;
     }
 
     return newptr;
@@ -110,9 +135,15 @@ static void free_lua(void *ctx, void *ptr)
     lua_rawset(L, 1);
     // free
     m->fn(m->ud, ptr, size, 0);
+    m->usesize -= size;
 }
 
-static void memalloc_init(memalloc_t *m, lua_State *L)
+static void memalloc_dispose(memalloc_t *m)
+{
+    lauxh_unref(m->L, m->ref);
+}
+
+static void memalloc_init(memalloc_t *m, lua_State *L, size_t maxsize)
 {
     m->L   = L;
     m->fn  = lua_getallocf(L, &m->ud);
@@ -123,11 +154,9 @@ static void memalloc_init(memalloc_t *m, lua_State *L)
     m->alc.realloc = realloc_lua;
     m->alc.free    = free_lua;
     m->alc.ctx     = (void *)m;
-}
-
-static void memalloc_dispose(memalloc_t *m)
-{
-    lauxh_unref(m->L, m->ref);
+    m->usesize     = 0;
+    m->maxsize     = maxsize;
+    m->nomem       = 0;
 }
 
 #define AS_OBJECT_MT "yyjson.as_object"
@@ -283,14 +312,15 @@ static int decode_lua(lua_State *L)
     size_t len           = 0;
     const char *str      = lauxh_checklstring(L, 1, &len);
     int with_null        = lauxh_optboolean(L, 2, 0);
-    yyjson_read_flag flg = lauxh_optflags(L, 3);
+    lua_Integer maxsize  = lauxh_optinteger(L, 3, 0);
+    yyjson_read_flag flg = lauxh_optflags(L, 4);
     yyjson_read_err err  = {0};
     yyjson_doc *doc      = NULL;
     memalloc_t m         = {0};
     int rc               = 3;
 
     lua_settop(L, 1);
-    memalloc_init(&m, L);
+    memalloc_init(&m, L, (maxsize < 0) ? 0 : (size_t)maxsize);
     if (flg & YYJSON_READ_INSITU) {
         len -= YYJSON_PADDING_SIZE;
     }
@@ -355,7 +385,10 @@ static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, int idx)
             lua_Integer prev = 0;
 
 TREAT_AS_ARRAY:
-            bin = yyjson_mut_arr(doc);
+            if (!(bin = yyjson_mut_arr(doc))) {
+                // failed to alloc memory
+                return NULL;
+            }
             lua_pushnil(L);
             while (lua_next(L, idx) != 0) {
                 lua_Integer i       = 0;
@@ -369,7 +402,12 @@ TREAT_AS_ARRAY:
                         lua_Integer skip = i - prev;
                         // fill spaces
                         for (lua_Integer n = 1; n < skip; n++) {
-                            yyjson_mut_arr_append(bin, yyjson_mut_null(doc));
+                            yyjson_mut_val *nullval = yyjson_mut_null(doc);
+                            if (!val) {
+                                // failed to alloc memory
+                                return NULL;
+                            }
+                            yyjson_mut_arr_append(bin, nullval);
                         }
                         yyjson_mut_arr_append(bin, val);
                         prev = i;
@@ -382,7 +420,10 @@ TREAT_AS_ARRAY:
 
 TREAT_AS_OBJECT:
         // as object
-        bin = yyjson_mut_obj(doc);
+        if (!(bin = yyjson_mut_obj(doc))) {
+            // failed to alloc memory
+            return NULL;
+        }
         lua_pushnil(L);
         while (lua_next(L, idx) != 0) {
             yyjson_mut_val *val = NULL;
@@ -390,6 +431,10 @@ TREAT_AS_OBJECT:
             if (lua_type(L, -2) == LUA_TSTRING &&
                 (val = tovalue(doc, L, lua_gettop(L)))) {
                 yyjson_mut_val *key = tovalue(doc, L, lua_gettop(L) - 1);
+                if (!key) {
+                    // failed to alloc memory
+                    return NULL;
+                }
                 yyjson_mut_obj_add(bin, key, val);
             }
             lua_pop(L, 1);
@@ -418,23 +463,34 @@ static int encode_lua(lua_State *L)
     yyjson_mut_val *val  = NULL;
     size_t len           = 0;
     const char *str      = NULL;
+    lua_Integer maxsize  = 0;
     memalloc_t m         = {0};
     int rc               = 3;
 
     luaL_checkany(L, 1);
-    flg = lauxh_optflags(L, 2);
+    maxsize = lauxh_optinteger(L, 2, 0);
+    flg     = lauxh_optflags(L, 3);
+    memalloc_init(&m, L, (maxsize < 0) ? 0 : (size_t)maxsize);
 
-    memalloc_init(&m, L);
     doc = yyjson_mut_doc_new(&m.alc);
+    if (!doc) {
+        err.msg  = strerror(ENOMEM);
+        err.code = YYJSON_READ_ERROR_MEMORY_ALLOCATION;
+        goto FAIL;
+    }
+
     lua_settop(L, 1);
     val = tovalue(doc, L, 1);
-    if (!val) {
-        val = yyjson_mut_null(doc);
+    if (m.nomem || (!val && !(val = yyjson_mut_null(doc)))) {
+        err.msg  = strerror(ENOMEM);
+        err.code = YYJSON_READ_ERROR_MEMORY_ALLOCATION;
+        goto FAIL;
     }
     yyjson_mut_doc_set_root(doc, val);
 
     str = yyjson_mut_write_opts(doc, flg, NULL, &len, &err);
     if (!str) {
+FAIL:
         lua_settop(L, 0);
         lua_pushnil(L);
         lua_pushstring(L, err.msg);
