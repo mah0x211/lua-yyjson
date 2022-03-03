@@ -1,3 +1,3 @@
 [submodule "deps/yyjson"]
 	path = deps/yyjson
-	url = git@github.com:ibireme/yyjson.git
+	url=https://github.com/ibireme/yyjson.git
