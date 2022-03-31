@@ -3,15 +3,19 @@ SRCS=$(wildcard ./deps/yyjson/src/*.c) $(wildcard $(SRCDIR)/*.c)
 OBJS=$(SRCS:.c=.o)
 INSTALL?=install
 
+ifdef YYJSON_COVERAGE
+COVFLAGS=--coverage
+endif
+
 .PHONY: all install clean
 
 all: $(TARGET)
 
 %.o: %.c
-	$(CC) $(CFLAGS) $(WARNINGS) $(COVERAGE) $(CPPFLAGS) -o $@ -c $<
+	$(CC) $(CFLAGS) $(WARNINGS) $(COVFLAGS) $(CPPFLAGS) -o $@ -c $<
 
 $(TARGET): $(OBJS)
-	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS) $(PLATFORM_LDFLAGS) $(COVERAGE)
+	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS) $(PLATFORM_LDFLAGS) $(COVFLAGS)
 
 install:
 	$(INSTALL) $(TARGET) $(LIBDIR)
