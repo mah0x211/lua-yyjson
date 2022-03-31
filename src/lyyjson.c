@@ -216,7 +216,7 @@ static inline void init_aux_objects(lua_State *L)
     AS_NULL_REF = lauxh_ref(L);
 }
 
-static int pushvalue(lua_State *L, yyjson_val *val, int with_null)
+static int pushvalue(lua_State *L, yyjson_val *val, int with_null, int with_ref)
 {
     switch (yyjson_get_type(val)) {
     case YYJSON_TYPE_NULL:
@@ -262,10 +262,12 @@ static int pushvalue(lua_State *L, yyjson_val *val, int with_null)
             return 2;
         }
         lua_createtable(L, it.max, 0);
-        lauxh_pushref(L, AS_ARRAY_REF);
-        lua_rawseti(L, -2, -1);
+        if (with_ref) {
+            lauxh_pushref(L, AS_ARRAY_REF);
+            lua_rawseti(L, -2, -1);
+        }
         while ((val = yyjson_arr_iter_next(&it))) {
-            if ((rc = pushvalue(L, val, with_null)) > 1) {
+            if ((rc = pushvalue(L, val, with_null, with_ref)) > 1) {
                 return rc;
             }
             lua_rawseti(L, -2, it.idx);
@@ -286,11 +288,13 @@ static int pushvalue(lua_State *L, yyjson_val *val, int with_null)
             return 2;
         }
         lua_createtable(L, 0, it.max);
-        lauxh_pushref(L, AS_OBJECT_REF);
-        lua_rawseti(L, -2, -1);
+        if (with_ref) {
+            lauxh_pushref(L, AS_OBJECT_REF);
+            lua_rawseti(L, -2, -1);
+        }
         while ((key = yyjson_obj_iter_next(&it))) {
             val = yyjson_obj_iter_get_val(key);
-            if ((rc = pushvalue(L, val, with_null)) > 1) {
+            if ((rc = pushvalue(L, val, with_null, with_ref)) > 1) {
                 return rc;
             }
             lua_setfield(L, -2, yyjson_get_str(key));
@@ -312,8 +316,9 @@ static int decode_lua(lua_State *L)
     size_t len           = 0;
     const char *str      = lauxh_checklstring(L, 1, &len);
     int with_null        = lauxh_optboolean(L, 2, 0);
-    lua_Integer maxsize  = lauxh_optinteger(L, 3, 0);
-    yyjson_read_flag flg = lauxh_optflags(L, 4);
+    int with_ref         = lauxh_optboolean(L, 3, 0);
+    lua_Integer maxsize  = lauxh_optinteger(L, 4, 0);
+    yyjson_read_flag flg = lauxh_optflags(L, 5);
     yyjson_read_err err  = {0};
     yyjson_doc *doc      = NULL;
     memalloc_t m         = {0};
@@ -326,7 +331,7 @@ static int decode_lua(lua_State *L)
     }
     doc = yyjson_read_opts((char *)str, len, flg, &m.alc, &err);
     if (doc) {
-        rc = pushvalue(L, yyjson_doc_get_root(doc), with_null);
+        rc = pushvalue(L, yyjson_doc_get_root(doc), with_null, with_ref);
         yyjson_doc_free(doc);
     } else {
         lua_pushnil(L);
