@@ -63,7 +63,6 @@ print(s) -- ["foo","bar",null,null,"baz"]
 local v = assert(yyjson.decode(s))
 print(dump(v))
 -- {
---     [-1] = "yyjson.as_array",
 --     [1] = "foo",
 --     [2] = "bar",
 --     [5] = "baz"
@@ -73,11 +72,20 @@ print(dump(v))
 v = assert(yyjson.decode(s, true))
 print(dump(v))
 -- {
---     [-1] = "yyjson.as_array",
 --     [1] = "foo",
 --     [2] = "bar",
 --     [3] = "yyjson.null",
 --     [4] = "yyjson.null",
+--     [5] = "baz"
+-- }
+
+-- decoded with the type reference
+v = assert(yyjson.decode(s, nil, true))
+print(dump(v))
+-- {
+--     [-1] = "yyjson.as_array",
+--     [1] = "foo",
+--     [2] = "bar",
 --     [5] = "baz"
 -- }
 ```
@@ -129,14 +137,15 @@ The `table` value will be handling as follows;
 - if the length of table (`#table`) is greater than `0`, treat table as an array.
 
 
-## v, err, errno = yyjson.decode( s [, with_null [, mlimit [, ...]]])
+## v, err, errno = yyjson.decode( s [, with_null [, with_ref [, mlimit [, ...]]]])
 
 decode a JSON string `s` to a Lua value.
 
 **Parameters**
 
 - `s:string`: a JSON string.
-- `with_null:boolean`: decode a `null` to `yyjson.NULL`.
+- `with_null:boolean`: `true` to decode a `null` to `yyjson.NULL`.
+- `with_ref:boolean`: `true` to add `yyjson.AS_OBJECT` and `yyjson.AS_ARRAY` to the array element `-1` of the table.
 - `mlimit:integer`: if a value greater than `0` is specified, the maximum memory usage is limited to this value.
 - `...:integer`: the following flags can be specified;
     - `yyjson.READ_NOFLAG`: default flag (RFC 8259 compliant):
