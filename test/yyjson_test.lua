@@ -66,14 +66,80 @@ function testcase.encode_decode()
             exp = '{"baz":{"qux":[true,false,1,1.05,null,"hello",{"foo":"bar"}]}}',
         },
     }) do
-        local act, err = yyjson.encode(v.val)
-        assert(act, err)
-        assert.equal(act, v.exp)
+        local enc_act = assert(yyjson.encode(v.val))
+        assert.equal(enc_act, v.exp)
 
-        act, err = yyjson.decode(act)
-        assert(not err, err)
-        assert.equal(act, v.val)
+        local dec_act, _, _, len = yyjson.decode(enc_act)
+        assert.equal(dec_act, v.val)
+        assert.equal(len, #enc_act)
     end
+end
+
+function testcase.decode_empty_content()
+    -- test that decode empty content
+    local s = table.concat({
+        string.rep('\t', 2),
+        string.rep(' ', 4),
+        string.rep('\n', 5),
+        string.rep(' ', 10),
+    })
+    local act, err, errno, len = yyjson.decode(s)
+    assert.is_nil(act)
+    assert.is_string(err)
+    assert.equal(errno, yyjson.READ_ERROR_EMPTY_CONTENT)
+    assert.is_nil(len)
+end
+
+function testcase.decode_ndjson()
+    -- test that decode NDJSON with READ_STOP_WHEN_DONE flag
+    local ndjson = {
+        '[true,false,1,1.05,null,"hello"]',
+        '{"baz":{"qux":[true,false,1,1.05,null,"hello",{"foo":"bar"}]}}',
+    }
+    local exp = {
+        {
+            true,
+            false,
+            1,
+            1.05,
+            nil,
+            'hello',
+        },
+        {
+            baz = {
+                qux = {
+                    true,
+                    false,
+                    1,
+                    1.05,
+                    nil,
+                    'hello',
+                    {
+                        foo = 'bar',
+                    },
+                },
+            },
+        },
+    }
+    local s = table.concat(ndjson, '')
+    for i = 1, #ndjson do
+        local act, err, errno, len = assert(
+                                         yyjson.decode(s, nil, nil, nil,
+                                                       yyjson.READ_STOP_WHEN_DONE))
+        assert.equal(act, exp[i])
+        assert.is_nil(err)
+        assert.is_nil(errno)
+        assert.equal(len, #ndjson[i])
+        s = string.sub(s, len + 1)
+    end
+
+    -- test that return error without READ_STOP_WHEN_DONE flag
+    s = table.concat(ndjson, '')
+    local act, err, errno, len = yyjson.decode(s)
+    assert.is_nil(act)
+    assert.is_string(err)
+    assert.equal(errno, yyjson.READ_ERROR_UNEXPECTED_CONTENT)
+    assert.is_nil(len)
 end
 
 function testcase.decode_insitu()

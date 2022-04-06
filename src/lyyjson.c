@@ -332,6 +332,12 @@ static int decode_lua(lua_State *L)
     doc = yyjson_read_opts((char *)str, len, flg, &m.alc, &err);
     if (doc) {
         rc = pushvalue(L, yyjson_doc_get_root(doc), with_null, with_ref);
+        if (rc == 1) {
+            lua_pushnil(L);
+            lua_pushnil(L);
+            lua_pushinteger(L, yyjson_doc_get_read_size(doc));
+            rc = 4;
+        }
         yyjson_doc_free(doc);
     } else {
         lua_pushnil(L);
