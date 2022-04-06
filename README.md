@@ -88,6 +88,37 @@ print(dump(v))
 --     [2] = "bar",
 --     [5] = "baz"
 -- }
+
+-- decode multiple json
+local mjson = '[1,2,3]\n[4,5,6] {"a":"b"}[7, 8, 9] '
+while #mjson > 0 do
+    local val, err, errno, len = yyjson.decode(mjson, nil, nil, nil,
+                                               yyjson.READ_STOP_WHEN_DONE)
+    if not len then
+        assert(errno == yyjson.READ_ERROR_EMPTY_CONTENT, err)
+        break
+    end
+    print(dump(val))
+    mjson = string.sub(mjson, len + 1)
+end
+-- {
+--     [1] = 1,
+--     [2] = 2,
+--     [3] = 3
+-- }
+-- {
+--     [1] = 4,
+--     [2] = 5,
+--     [3] = 6
+-- }
+-- {
+--     a = "b"
+-- }
+-- {
+--     [1] = 7,
+--     [2] = 8,
+--     [3] = 9
+-- }
 ```
 
 ## About Memory Allocation
@@ -137,7 +168,7 @@ The `table` value will be handling as follows;
 - if the length of table (`#table`) is greater than `0`, treat table as an array.
 
 
-## v, err, errno = yyjson.decode( s [, with_null [, with_ref [, mlimit [, ...]]]])
+## v, err, errno, len = yyjson.decode( s [, with_null [, with_ref [, mlimit [, ...]]]])
 
 decode a JSON string `s` to a Lua value.
 
@@ -183,5 +214,5 @@ decode a JSON string `s` to a Lua value.
     - `yyjson.READ_ERROR_LITERAL`: Invalid JSON literal, such as `"truu"`.
     - `yyjson.READ_ERROR_FILE_OPEN`: Failed to open a file.
     - `yyjson.READ_ERROR_FILE_READ`: Failed to read a file.
-
+- `len:integer`: read size of JSON string.
 
