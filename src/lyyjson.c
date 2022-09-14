@@ -567,6 +567,19 @@ LUALIB_API int luaopen_yyjson(lua_State *L)
         such as 1e999, NaN, inf, -Infinity. */
     lauxh_pushint2tbl(L, "READ_ALLOW_INF_AND_NAN",
                       YYJSON_READ_ALLOW_INF_AND_NAN);
+    /** Read number as raw string (value with YYJSON_TYPE_RAW type),
+    inf/nan literal is also read as raw with `ALLOW_INF_AND_NAN` flag. */
+    lauxh_pushint2tbl(L, "READ_NUMBER_AS_RAW", YYJSON_READ_NUMBER_AS_RAW);
+    /** Allow reading invalid unicode when parsing string values (non-standard).
+        Invalid characters will be allowed to appear in the string values, but
+        invalid escape sequences will still be reported as errors.
+        This flag does not affect the performance of correctly encoded strings.
+
+        @warning Strings in JSON values may contain incorrect encoding when this
+        option is used, you need to handle these strings carefully to avoid
+       security risks. */
+    lauxh_pushint2tbl(L, "READ_ALLOW_INVALID_UNICODE",
+                      YYJSON_READ_ALLOW_INVALID_UNICODE);
 
     /** Result code for JSON reader. */
     /** Success, no error. */
@@ -629,6 +642,13 @@ LUALIB_API int luaopen_yyjson(lua_State *L)
         This flag will override `YYJSON_WRITE_ALLOW_INF_AND_NAN` flag. */
     lauxh_pushint2tbl(L, "WRITE_INF_AND_NAN_AS_NULL",
                       YYJSON_WRITE_INF_AND_NAN_AS_NULL);
+    /** Allow invalid unicode when encoding string values (non-standard).
+        Invalid characters in string value will be copied byte by byte.
+        If `YYJSON_WRITE_ESCAPE_UNICODE` flag is also set, invalid character
+        will be escaped as `U+FFFD` (replacement character). This flag does not
+        affect the performance of correctly encoded strings. */
+    lauxh_pushint2tbl(L, "WRITE_ALLOW_INVALID_UNICODE",
+                      YYJSON_WRITE_ALLOW_INVALID_UNICODE);
 
     /** Result code for JSON writer */
     /** Success, no error. */
