@@ -146,6 +146,7 @@ encode a Lua value `v` to a JSON string.
     - `yyjson.WRITE_ESCAPE_SLASHES`: Escape `/` as `\/`.
     - `yyjson.WRITE_ALLOW_INF_AND_NAN`: Write `inf` and `nan` number as `Infinity` and `NaN` literal (non-standard).
     - `yyjson.WRITE_INF_AND_NAN_AS_NULL`: Write `inf` and `nan` number as `null` literal. This flag will override `yyjson.WRITE_ALLOW_INF_AND_NAN` flag.
+    - `yyjson.WRITE_ALLOW_INVALID_UNICODE`: Allow invalid unicode when encoding string values. Invalid characters in string value will be copied byte by byte. If `WRITE_ESCAPE_UNICODE` flag is also set, invalid character will be escaped as `U+FFFD` (replacement character). This flag does not affect the performance of correctly encoded strings.
 
 **Returns**
 
@@ -194,7 +195,8 @@ decode a JSON string `s` to a Lua value.
     - `yyjson.READ_ALLOW_TRAILING_COMMAS`: Allow single trailing comma at the end of an object or array, such as `[1,2,3,]` `{"a":1,"b":2,}`.
     - `yyjson.READ_ALLOW_COMMENTS`: Allow C-style single line and multiple line comments.
     - `yyjson.READ_ALLOW_INF_AND_NAN`: Allow `inf`/`nan` number and literal, case-insensitive, such as `1e999`, `NaN`, `inf`, `-Infinity`.
-
+    - `yyjson.READ_NUMBER_AS_RAW`: Read number as raw string (value with `YYJSON_TYPE_RAW` type), `inf`/`nan` literal is also read as raw with `ALLOW_INF_AND_NAN` flag.
+    - `yyjson.READ_ALLOW_INVALID_UNICODE`: Allow reading invalid unicode when parsing string values. Invalid characters will be allowed to appear in the string values, but invalid escape sequences will still be reported as errors. This flag does not affect the performance of correctly encoded strings. **@warning** Strings in JSON values may contain incorrect encoding when this option is used, you need to handle these strings carefully to avoid security risks.
 
 **Returns**
 
