@@ -111,6 +111,7 @@ static void *realloc_lua(void *ctx, void *ptr, size_t size)
         lua_rawset(L, 1);
     } else {
         m->nomem = 1;
+        lua_settop(L, 1);
     }
 
     return newptr;
