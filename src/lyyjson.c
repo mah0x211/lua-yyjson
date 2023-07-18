@@ -22,13 +22,14 @@
  */
 
 #include "yyjson.h"
+#include <assert.h>
 #include <lauxhlib.h>
 
 typedef struct {
     lua_State *L;
     int ref;
     lua_State *th;
-    lua_Alloc fn;
+    lua_Alloc allocf;
     void *ud;
     yyjson_alc alc;
     size_t usesize;
@@ -50,7 +51,7 @@ static void *malloc_lua(void *ctx, size_t size)
         return NULL;
     }
 
-    ptr = m->fn(m->ud, NULL, 0, size);
+    ptr = m->allocf(m->ud, NULL, 0, size);
     if (ptr) {
         // keep alloc size
         // buffer for hexadecimal string 0xFFFFFFFFFFFFFFFF
@@ -94,7 +95,7 @@ static void *realloc_lua(void *ctx, void *ptr, size_t size)
     lua_rawget(L, 1);
     sz     = (size_t *)lua_topointer(L, -1);
     // realloc
-    newptr = m->fn(m->ud, ptr, *sz, size);
+    newptr = m->allocf(m->ud, ptr, *sz, size);
     if (newptr) {
         // remove old alloc size
         lua_pushvalue(L, 2);
@@ -134,21 +135,26 @@ static void free_lua(void *ctx, void *ptr)
     lua_pushnil(L);
     lua_rawset(L, 1);
     // free
-    m->fn(m->ud, ptr, size, 0);
+    m->allocf(m->ud, ptr, size, 0);
     m->usesize -= size;
 }
 
 static void memalloc_dispose(memalloc_t *m)
 {
+    assert(m->usesize == 0);
     lauxh_unref(m->L, m->ref);
 }
 
 static void memalloc_init(memalloc_t *m, lua_State *L, size_t maxsize)
 {
-    m->L   = L;
-    m->fn  = lua_getallocf(L, &m->ud);
-    m->th  = lua_newthread(L);
-    m->ref = lauxh_ref(L);
+    m->L      = L;
+    m->allocf = lua_getallocf(L, &m->ud);
+    m->th     = lua_newthread(L);
+    m->ref    = lauxh_ref(L);
+
+    // create the table that keeps alloc size of each pointer
+    // key: pointer address in representation of hexadecimal string
+    // value: alloc size that is stored in size_t*
     lua_newtable(m->th);
     m->alc.malloc  = malloc_lua;
     m->alc.realloc = realloc_lua;
@@ -171,10 +177,10 @@ static int AS_ARRAY_REF  = LUA_NOREF;
 static int AS_NULL_REF   = LUA_NOREF;
 
 #define tostring_lua(L, tname)                                                 \
- do {                                                                          \
-  lauxh_isuserdataof((L), 1, (tname));                                         \
-  lua_pushliteral((L), tname);                                                 \
- } while (0)
+    do {                                                                       \
+        lauxh_isuserdataof((L), 1, (tname));                                   \
+        lua_pushliteral((L), tname);                                           \
+    } while (0)
 
 static int object_tostring_lua(lua_State *L)
 {
@@ -499,7 +505,7 @@ static int encode_lua(lua_State *L)
     }
     yyjson_mut_doc_set_root(doc, val);
 
-    str = yyjson_mut_write_opts(doc, flg, NULL, &len, &err);
+    str = yyjson_mut_write_opts(doc, flg, &m.alc, &len, &err);
     if (!str) {
 FAIL:
         lua_settop(L, 0);
@@ -508,6 +514,7 @@ FAIL:
         lua_pushinteger(L, err.code);
     } else {
         lua_pushlstring(L, str, len);
+        m.alc.free(m.alc.ctx, (void *)str);
         rc = 1;
     }
     yyjson_mut_doc_free(doc);
