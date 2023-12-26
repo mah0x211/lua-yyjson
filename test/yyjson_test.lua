@@ -1,4 +1,5 @@
 local testcase = require('testcase')
+local assert = require('assert')
 local yyjson = require('yyjson')
 
 function testcase.encode_decode()
@@ -222,7 +223,7 @@ function testcase.decode_with_ref()
     assert.equal(act, exp)
 end
 
-function testcase.memory_limit()
+function testcase.memory_limit_encode()
     -- test that limit memory usage for encoding
     local v, err, errno = yyjson.encode({
         [-1] = yyjson.AS_OBJECT,
@@ -242,9 +243,17 @@ function testcase.memory_limit()
     assert.match(err, 'memory')
     assert.equal(errno, yyjson.WRITE_ERROR_MEMORY_ALLOCATION)
 
+    -- test that limit memory usage for encoding
+    v, err, errno = yyjson.encode('foo', 10)
+    assert.is_nil(v)
+    assert.match(err, 'memory')
+    assert.equal(errno, yyjson.WRITE_ERROR_MEMORY_ALLOCATION)
+end
+
+function testcase.memory_limit_decode()
     -- test that limit memory usage for dencoding
     local s = '{"foo": null, "bar":[true,null,"hello",{"baz":"qux"}]}'
-    v, err, errno = yyjson.decode(s, nil, nil, 100)
+    local v, err, errno = yyjson.decode(s, nil, nil, 100)
     assert.is_nil(v)
     assert.match(err, 'memory')
     assert.equal(errno, yyjson.READ_ERROR_MEMORY_ALLOCATION)

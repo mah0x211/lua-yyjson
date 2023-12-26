@@ -72,8 +72,9 @@ static void *malloc_lua(void *ctx, size_t size)
 }
 
 /* Same as libc's realloc(), should not be NULL. */
-static void *realloc_lua(void *ctx, void *ptr, size_t size)
+static void *realloc_lua(void *ctx, void *ptr, size_t old_size, size_t size)
 {
+    (void)old_size;
     memalloc_t *m = (memalloc_t *)ctx;
     lua_State *L  = m->th;
     char b[20]    = {0};
@@ -589,6 +590,13 @@ LUALIB_API int luaopen_yyjson(lua_State *L)
     lauxh_pushint2tbl(L, "READ_ALLOW_INVALID_UNICODE",
                       YYJSON_READ_ALLOW_INVALID_UNICODE);
 
+    /** Read big numbers as raw strings. These big numbers include integers that
+     * cannot be represented by `int64_t` and `uint64_t`, and floating-point
+     * numbers that cannot be represented by finite `double`.
+     * The flag will be
+     * overridden by `YYJSON_READ_NUMBER_AS_RAW` flag. */
+    lauxh_pushint2tbl(L, "READ_BIGNUM_AS_RAW", YYJSON_READ_BIGNUM_AS_RAW);
+
     /** Result code for JSON reader. */
     /** Success, no error. */
     lauxh_pushint2tbl(L, "READ_SUCCESS", YYJSON_READ_SUCCESS);
@@ -657,6 +665,11 @@ LUALIB_API int luaopen_yyjson(lua_State *L)
         affect the performance of correctly encoded strings. */
     lauxh_pushint2tbl(L, "WRITE_ALLOW_INVALID_UNICODE",
                       YYJSON_WRITE_ALLOW_INVALID_UNICODE);
+
+    /** Write JSON pretty with 2 space indent.
+     * This flag will override `YYJSON_WRITE_PRETTY` flag. */
+    lauxh_pushint2tbl(L, "WRITE_PRETTY_TWO_SPACES",
+                      YYJSON_WRITE_PRETTY_TWO_SPACES);
 
     /** Result code for JSON writer */
     /** Success, no error. */
