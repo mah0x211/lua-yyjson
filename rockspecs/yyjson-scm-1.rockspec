@@ -6,6 +6,7 @@ source = {
 }
 description = {
     summary = "lua bindings for yyjson.",
+    detailed = "YYJSON is a high performance JSON library written in ANSI C.",
     homepage = "https://github.com/mah0x211/lua-yyjson",
     license = "MIT/X11",
     maintainer = "Masatoshi Fukunaga",
