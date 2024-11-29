@@ -671,6 +671,10 @@ LUALIB_API int luaopen_yyjson(lua_State *L)
     lauxh_pushint2tbl(L, "WRITE_PRETTY_TWO_SPACES",
                       YYJSON_WRITE_PRETTY_TWO_SPACES);
 
+    /** Adds a newline character `\n` at the end of the JSON.
+        This can be helpful for text editors or NDJSON. */
+    lauxh_pushint2tbl(L, "WRITE_NEWLINE_AT_END", YYJSON_WRITE_NEWLINE_AT_END);
+
     /** Result code for JSON writer */
     /** Success, no error. */
     lauxh_pushint2tbl(L, "WRITE_SUCCESS", YYJSON_WRITE_SUCCESS);

@@ -146,7 +146,8 @@ encode a Lua value `v` to a JSON string.
 | `yyjson.WRITE_ALLOW_INF_AND_NAN` | Write `inf` and `nan` number as `Infinity` and `NaN` literal (non-standard). |
 | `yyjson.WRITE_INF_AND_NAN_AS_NULL` | Write `inf` and `nan` number as `null` literal.<br>This flag will override `yyjson.WRITE_ALLOW_INF_AND_NAN` flag. |
 | `yyjson.WRITE_ALLOW_INVALID_UNICODE` | Allow invalid unicode when encoding string values (non-standard).<br>Invalid characters in string value will be copied byte by byte.<br>If `WRITE_ESCAPE_UNICODE` flag is also set, invalid character will be escaped as `U+FFFD` (replacement character).<br>This flag does not affect the performance of correctly encoded strings. |
-| `yyjson.WRITE_PRETTY_TWO_SPACES` | Write JSON pretty with 2 space indent.<br>This flag will override 
+| `yyjson.WRITE_PRETTY_TWO_SPACES` | Write JSON pretty with 2 space indent.<br>This flag will override  `WRITE_PRETTY` flag. |
+| `yyjson.WRITE_NEWLINE_AT_END` | Adds a newline character `\n` at the end of the JSON.<br>This can be helpful for text editors or NDJSON | 
 
 
 **Returns**
