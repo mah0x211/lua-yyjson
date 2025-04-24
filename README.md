@@ -92,10 +92,10 @@ print(dump(v))
 -- decode multiple json
 local mjson = '[1,2,3]\n[4,5,6] {"a":"b"}[7, 8, 9] '
 while #mjson > 0 do
-    local val, err, errno, len = yyjson.decode(mjson, nil, nil, nil,
-                                               yyjson.READ_STOP_WHEN_DONE)
+    local val, err, len = yyjson.decode(mjson, nil, nil, nil,
+                                        yyjson.READ_STOP_WHEN_DONE)
     if not len then
-        assert(errno == yyjson.READ_ERROR_EMPTY_CONTENT, err)
+        assert(tostring(err):find('ERROR_EMPTY_CONTENT'), err)
         break
     end
     print(dump(val))
@@ -121,13 +121,18 @@ end
 -- }
 ```
 
+## Error Handling
+
+the following functions return the `error` object created by https://github.com/mah0x211/lua-errno module.
+
+
 ## About Memory Allocation
 
 `lua-yyjson` uses the `lua_Alloc` function to allocate memory.  
 Therefore, the amount of memory available depends on the `lua_Alloc` function associated with `lua_State*`.
 
 
-## s, err, errno = yyjson.encode( v [, mlimit [, ...]])
+## s, err = yyjson.encode( v [, mlimit [, ...]])
 
 encode a Lua value `v` to a JSON string.
 
@@ -153,14 +158,14 @@ encode a Lua value `v` to a JSON string.
 **Returns**
 
 - `s:string`: a JSON string
-- `err:string`: error message.
-- `errno:integer`: the following error number;
-    - `yyjson.WRITE_ERROR_INVALID_PARAMETER`: Invalid parameter, such as `NULL` document.
-    - `yyjson.WRITE_ERROR_MEMORY_ALLOCATION`: Memory allocation failure occurs.
-    - `yyjson.WRITE_ERROR_INVALID_VALUE_TYPE`: Invalid value type in JSON document.
-    - `yyjson.WRITE_ERROR_NAN_OR_INF`: `NaN` or `Infinity` number occurs.
-    - `yyjson.WRITE_ERROR_FILE_OPEN`: Failed to open a file.
-    - `yyjson.WRITE_ERROR_FILE_WRITE`: Failed to write a file.
+- `err:any`: error object that contains the following string:
+    - `ENOMEM`: Memory allocation failure occurs.
+    - `ERROR_MEMORY_ALLOCATION`: Memory allocation failure occurs.
+    - `ERROR_INVALID_PARAMETER`: Invalid parameter, such as `NULL` document.
+    - `ERROR_INVALID_VALUE_TYPE`: Invalid value type in JSON document.
+    - `ERROR_NAN_OR_INF`: `NaN` or `Infinity` number occurs.
+    - `ERROR_FILE_OPEN`: Failed to open a file.
+    - `ERROR_FILE_WRITE`: Failed to write a file.
 
 **NOTE:** 
 
@@ -171,7 +176,7 @@ The `table` value will be handling as follows;
 - if the length of table (`#table`) is greater than `0`, treat table as an array.
 
 
-## v, err, errno, len = yyjson.decode( s [, with_null [, with_ref [, mlimit [, ...]]]])
+## v, err, len = yyjson.decode( s [, with_null [, with_ref [, mlimit [, ...]]]])
 
 decode a JSON string `s` to a Lua value.
 
@@ -186,7 +191,6 @@ decode a JSON string `s` to a Lua value.
 | flag | description |
 |:-----|:------------|
 | `yyjson.READ_NOFLAG` | default flag (RFC 8259 compliant):<br>- Read positive integer as `uint64_t`.<br>- Read negative integer as `int64_t`.<br>- Read floating-point number as double with correct rounding.<br>- Read integer which cannot fit in `uint64_t` or `int64_t` as `double`.<br>- Report error if real number is `infinity`.<br>- Report error if string contains invalid `UTF-8` character or `BOM`.<br>- Report error on `trailing commas`, `comments`, `inf` and `nan` literals. |
-| `yyjson.READ_INSITU` | Read the input data in-situ.<br>This flag allows the reader to modify and use input data to store string values, which can increase reading speed slightly.<br>The caller should hold the input data before free the document.<br>The input data must be padded by at least `yyjson.PADDING_SIZE` byte.<br>For example: "[1,2]" should be "[1,2]\0\0\0\0", length should be 5. |
 | `yyjson.READ_STOP_WHEN_DONE` | Stop when done instead of issues an error if there's additional content after a JSON document. This flag may used to parse small pieces of JSON in larger data, such as `NDJSON (Newline Delimited JSON)`. |
 | `yyjson.READ_ALLOW_TRAILING_COMMAS` | Allow single trailing comma at the end of an object or array, such as `[1,2,3,]` `{"a":1,"b":2,}`. |
 | `yyjson.READ_ALLOW_COMMENTS` | Allow C-style single line and multiple line comments. |
@@ -198,20 +202,20 @@ decode a JSON string `s` to a Lua value.
 **Returns**
 
 - `v:boolean|string|number|table`: a decoded value.
-- `err:string`: error message.
-- `errno:integer`: the following error number;
-    - `yyjson.READ_ERROR_INVALID_PARAMETER`: Invalid parameter, such as `NULL` string or invalid file path.
-    - `yyjson.READ_ERROR_MEMORY_ALLOCATION`: Memory allocation failure occurs.
-    - `yyjson.READ_ERROR_EMPTY_CONTENT`: Input JSON string is empty.
-    - `yyjson.READ_ERROR_UNEXPECTED_CONTENT`: Unexpected content after document, such as `"[1]#"`.
-    - `yyjson.READ_ERROR_UNEXPECTED_END`: Unexpected ending, such as `"[123"`.
-    - `yyjson.READ_ERROR_UNEXPECTED_CHARACTER`: Unexpected character inside the document, such as `"[#]"`.
-    - `yyjson.READ_ERROR_JSON_STRUCTURE`: Invalid JSON structure, such as `"[1,]"`.
-    - `yyjson.READ_ERROR_INVALID_COMMENT`: Invalid comment, such as unclosed multi-line comment.
-    - `yyjson.READ_ERROR_INVALID_NUMBER`: Invalid number, such as `"123.e12"`, `"000"`.
-    - `yyjson.READ_ERROR_INVALID_STRING`: Invalid string, such as invalid escaped character inside a string.
-    - `yyjson.READ_ERROR_LITERAL`: Invalid JSON literal, such as `"truu"`.
-    - `yyjson.READ_ERROR_FILE_OPEN`: Failed to open a file.
-    - `yyjson.READ_ERROR_FILE_READ`: Failed to read a file.
+- `err:any`: error object that contains the following string:
+    - `ENOMEM`: Memory allocation failure occurs.
+    - `ERROR_MEMORY_ALLOCATION`: Memory allocation failure occurs.
+    - `ERROR_INVALID_PARAMETER`: Invalid parameter, such as `NULL` string or invalid file path.
+    - `ERROR_EMPTY_CONTENT`: Input JSON string is empty.
+    - `ERROR_UNEXPECTED_CONTENT`: Unexpected content after document, such as `"[1]#"`.
+    - `ERROR_UNEXPECTED_END`: Unexpected ending, such as `"[123"`.
+    - `ERROR_UNEXPECTED_CHARACTER`: Unexpected character inside the document, such as `"[#]"`.
+    - `ERROR_JSON_STRUCTURE`: Invalid JSON structure, such as `"[1,]"`.
+    - `ERROR_INVALID_COMMENT`: Invalid comment, such as unclosed multi-line comment.
+    - `ERROR_INVALID_NUMBER`: Invalid number, such as `"123.e12"`, `"000"`.
+    - `ERROR_INVALID_STRING`: Invalid string, such as invalid escaped character inside a string.
+    - `ERROR_LITERAL`: Invalid JSON literal, such as `"truu"`.
+    - `ERROR_FILE_OPEN`: Failed to open a file.
+    - `ERROR_FILE_READ`: Failed to read a file.
 - `len:integer`: read size of JSON string.
 

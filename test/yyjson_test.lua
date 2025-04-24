@@ -70,7 +70,7 @@ function testcase.encode_decode()
         local enc_act = assert(yyjson.encode(v.val))
         assert.equal(enc_act, v.exp)
 
-        local dec_act, _, _, len = yyjson.decode(enc_act)
+        local dec_act, _, len = yyjson.decode(enc_act)
         assert.equal(dec_act, v.val)
         assert.equal(len, #enc_act)
     end
@@ -84,10 +84,9 @@ function testcase.decode_empty_content()
         string.rep('\n', 5),
         string.rep(' ', 10),
     })
-    local act, err, errno, len = yyjson.decode(s)
+    local act, err, len = yyjson.decode(s)
     assert.is_nil(act)
-    assert.is_string(err)
-    assert.equal(errno, yyjson.READ_ERROR_EMPTY_CONTENT)
+    assert.match(err, 'ERROR_EMPTY_CONTENT')
     assert.is_nil(len)
 end
 
@@ -124,47 +123,20 @@ function testcase.decode_ndjson()
     }
     local s = table.concat(ndjson, '')
     for i = 1, #ndjson do
-        local act, err, errno, len = assert(
-                                         yyjson.decode(s, nil, nil, nil,
-                                                       yyjson.READ_STOP_WHEN_DONE))
+        local act, err, len = assert(yyjson.decode(s, nil, nil, nil,
+                                                   yyjson.READ_STOP_WHEN_DONE))
         assert.equal(act, exp[i])
         assert.is_nil(err)
-        assert.is_nil(errno)
         assert.equal(len, #ndjson[i])
         s = string.sub(s, len + 1)
     end
 
     -- test that return error without READ_STOP_WHEN_DONE flag
     s = table.concat(ndjson, '')
-    local act, err, errno, len = yyjson.decode(s)
+    local act, err, len = yyjson.decode(s)
     assert.is_nil(act)
-    assert.is_string(err)
-    assert.equal(errno, yyjson.READ_ERROR_UNEXPECTED_CONTENT)
+    assert.match(err, 'ERROR_UNEXPECTED_CONTENT')
     assert.is_nil(len)
-end
-
-function testcase.decode_insitu()
-    -- test that decode value with READ_INSITU flag
-    local exp = {
-        baz = {
-            qux = {
-                true,
-                false,
-                1,
-                1.05,
-                nil,
-                'hello',
-                {
-                    foo = 'bar',
-                },
-            },
-        },
-    }
-    local s =
-        '{"baz":{"qux":[true,false,1,1.05,null,"hello",{"foo":"bar"}]}}' ..
-            string.rep(string.char(0), yyjson.PADDING_SIZE)
-    local act = assert(yyjson.decode(s, nil, nil, nil, yyjson.READ_INSITU))
-    assert.equal(act, exp)
 end
 
 function testcase.encode_null()
@@ -225,7 +197,7 @@ end
 
 function testcase.memory_limit_encode()
     -- test that limit memory usage for encoding
-    local v, err, errno = yyjson.encode({
+    local v, err = yyjson.encode({
         [-1] = yyjson.AS_OBJECT,
         foo = yyjson.NULL,
         bar = {
@@ -240,21 +212,18 @@ function testcase.memory_limit_encode()
         },
     }, 200)
     assert.is_nil(v)
-    assert.match(err, 'memory')
-    assert.equal(errno, yyjson.WRITE_ERROR_MEMORY_ALLOCATION)
+    assert.match(err, 'ENOMEM')
 
     -- test that limit memory usage for encoding
-    v, err, errno = yyjson.encode('foo', 10)
+    v, err = yyjson.encode('foo', 10)
     assert.is_nil(v)
-    assert.match(err, 'memory')
-    assert.equal(errno, yyjson.WRITE_ERROR_MEMORY_ALLOCATION)
+    assert.match(err, 'ENOMEM')
 end
 
 function testcase.memory_limit_decode()
     -- test that limit memory usage for dencoding
     local s = '{"foo": null, "bar":[true,null,"hello",{"baz":"qux"}]}'
-    local v, err, errno = yyjson.decode(s, nil, nil, 100)
+    local v, err = yyjson.decode(s, nil, nil, 100)
     assert.is_nil(v)
-    assert.match(err, 'memory')
-    assert.equal(errno, yyjson.READ_ERROR_MEMORY_ALLOCATION)
+    assert.match(err, 'ENOMEM')
 end

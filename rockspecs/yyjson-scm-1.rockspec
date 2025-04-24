@@ -18,9 +18,7 @@ dependencies = {
 build = {
     type = "make",
     build_variables = {
-        PACKAGE = "yyjson",
         LIB_EXTENSION = "$(LIB_EXTENSION)",
-        SRCDIR = "src",
         CFLAGS = "$(CFLAGS)",
         WARNINGS = "-Wall -Wno-trigraphs -Wmissing-field-initializers -Wreturn-type -Wmissing-braces -Wparentheses -Wno-switch -Wunused-function -Wunused-label -Wunused-parameter -Wunused-variable -Wunused-value -Wuninitialized -Wunknown-pragmas -Wshadow -Wsign-compare",
         CPPFLAGS = "-I$(LUA_INCDIR) -I./deps/yyjson/src/",
@@ -28,10 +26,9 @@ build = {
         YYJSON_COVERAGE = "$(YYJSON_COVERAGE)",
     },
     install_variables = {
-        PACKAGE = "yyjson",
         LIB_EXTENSION = "$(LIB_EXTENSION)",
-        SRCDIR = "src",
-        LIBDIR = "$(LIBDIR)",
+        INST_LIBDIR = "$(LIBDIR)/yyjson",
+        INST_LUADIR = "$(LUADIR)",
         LUA_INCDIR = "$(LUA_INCDIR)",
     },
 }
