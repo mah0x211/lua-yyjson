@@ -494,7 +494,7 @@ static int encode_lua(lua_State *L)
     doc = yyjson_mut_doc_new(&m.alc);
     if (!doc) {
         err.msg  = strerror(ENOMEM);
-        err.code = YYJSON_READ_ERROR_MEMORY_ALLOCATION;
+        err.code = YYJSON_WRITE_ERROR_MEMORY_ALLOCATION;
         goto FAIL;
     }
 
@@ -502,7 +502,7 @@ static int encode_lua(lua_State *L)
     val = tovalue(doc, L, 1);
     if (m.nomem || (!val && !(val = yyjson_mut_null(doc)))) {
         err.msg  = strerror(ENOMEM);
-        err.code = YYJSON_READ_ERROR_MEMORY_ALLOCATION;
+        err.code = YYJSON_WRITE_ERROR_MEMORY_ALLOCATION;
         goto FAIL;
     }
     yyjson_mut_doc_set_root(doc, val);
