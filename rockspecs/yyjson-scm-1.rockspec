@@ -14,6 +14,8 @@ description = {
 dependencies = {
     "lua >= 5.1",
     "lauxhlib >= 0.3.1",
+    "errno >= 0.5.0",
+    "error >= 0.14.0",
 }
 build = {
     type = "make",
