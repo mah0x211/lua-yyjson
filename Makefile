@@ -1,5 +1,5 @@
-TARGET=$(PACKAGE).$(LIB_EXTENSION)
-SRCS=$(wildcard ./deps/yyjson/src/*.c) $(wildcard $(SRCDIR)/*.c)
+TARGET=doc.$(LIB_EXTENSION)
+SRCS=$(wildcard ./deps/yyjson/src/*.c) $(wildcard src/*.c)
 OBJS=$(SRCS:.c=.o)
 GCDA=$(OBJS:.o=.gcda)
 INSTALL?=install
@@ -18,10 +18,11 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS) $(PLATFORM_LDFLAGS) $(COVFLAGS)
 
-install:
-	$(INSTALL) $(TARGET) $(LIBDIR)
+install: $(TARGET)
+	$(INSTALL) -d $(INST_LIBDIR)
+	$(INSTALL) $(TARGET) $(INST_LIBDIR)
+	$(INSTALL) yyjson.lua $(INST_LUADIR)
 	rm -f $(OBJS) $(GCDA) *.so
 
 clean:
-	rm -f ./src/*.o
-	rm -f ./*.so
+	rm -f $(OBJS) $(GCDA) *.so
