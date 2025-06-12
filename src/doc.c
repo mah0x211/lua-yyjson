@@ -32,147 +32,113 @@
 
 static const char *read_err2name(yyjson_read_err err)
 {
-    switch (err.code) {
-    case YYJSON_READ_SUCCESS:
+    if (err.code == YYJSON_READ_SUCCESS) {
         /** Success, no error. */
         return "SUCCESS";
-
-    case YYJSON_READ_ERROR_INVALID_PARAMETER:
+    } else if (err.code == YYJSON_READ_ERROR_INVALID_PARAMETER) {
         /** Invalid parameter, such as NULL input string or 0 input length. */
         return "ERROR_INVALID_PARAMETER";
-
-    case YYJSON_READ_ERROR_MEMORY_ALLOCATION:
+    } else if (err.code == YYJSON_READ_ERROR_MEMORY_ALLOCATION) {
         /** Memory allocation failure occurs. */
         return "ERROR_MEMORY_ALLOCATION";
-
-    case YYJSON_READ_ERROR_EMPTY_CONTENT:
+    } else if (err.code == YYJSON_READ_ERROR_EMPTY_CONTENT) {
         /** Input JSON string is empty. */
         return "ERROR_EMPTY_CONTENT";
-
-    case YYJSON_READ_ERROR_UNEXPECTED_CONTENT:
+    } else if (err.code == YYJSON_READ_ERROR_UNEXPECTED_CONTENT) {
         /** Unexpected content after document, such as `[123]abc`. */
         return "ERROR_UNEXPECTED_CONTENT";
-
-    case YYJSON_READ_ERROR_UNEXPECTED_END:
+    } else if (err.code == YYJSON_READ_ERROR_UNEXPECTED_END) {
         /** Unexpected ending, such as `[123`. */
         return "ERROR_UNEXPECTED_END";
-
-    case YYJSON_READ_ERROR_UNEXPECTED_CHARACTER:
+    } else if (err.code == YYJSON_READ_ERROR_UNEXPECTED_CHARACTER) {
         /** Unexpected character inside the document, such as `[abc]`. */
         return "ERROR_UNEXPECTED_CHARACTER";
-
-    case YYJSON_READ_ERROR_JSON_STRUCTURE:
+    } else if (err.code == YYJSON_READ_ERROR_JSON_STRUCTURE) {
         /** Invalid JSON structure, such as `[1,]`. */
         return "ERROR_JSON_STRUCTURE";
-
-    case YYJSON_READ_ERROR_INVALID_COMMENT:
+    } else if (err.code == YYJSON_READ_ERROR_INVALID_COMMENT) {
         /** Invalid comment, such as unclosed multi-line comment. */
         return "ERROR_INVALID_COMMENT";
-
-    case YYJSON_READ_ERROR_INVALID_NUMBER:
+    } else if (err.code == YYJSON_READ_ERROR_INVALID_NUMBER) {
         /** Invalid number, such as `123.e12`, `000`. */
         return "ERROR_INVALID_NUMBER";
-
-    case YYJSON_READ_ERROR_INVALID_STRING:
+    } else if (err.code == YYJSON_READ_ERROR_INVALID_STRING) {
         /** Invalid string, such as invalid escaped character inside a string.
          */
         return "ERROR_INVALID_STRING";
-
-    case YYJSON_READ_ERROR_LITERAL:
+    } else if (err.code == YYJSON_READ_ERROR_LITERAL) {
         /** Invalid JSON literal, such as `truu`. */
         return "ERROR_LITERAL";
-
-    case YYJSON_READ_ERROR_FILE_OPEN:
+    } else if (err.code == YYJSON_READ_ERROR_FILE_OPEN) {
         /** Failed to open a file. */
         return "ERROR_FILE_OPEN";
-
-    case YYJSON_READ_ERROR_FILE_READ:
+    } else if (err.code == YYJSON_READ_ERROR_FILE_READ) {
         /** Failed to read a file. */
         return "ERROR_FILE_READ";
-
-    default:
+    } else {
         return "unsupported error code";
     }
 }
 
 static const char *write_err2name(yyjson_write_err err)
 {
-    switch (err.code) {
-    case YYJSON_WRITE_SUCCESS:
+    if (err.code == YYJSON_WRITE_SUCCESS) {
         /** Success, no error. */
         return "SUCCESS";
-
-    case YYJSON_WRITE_ERROR_INVALID_PARAMETER:
+    } else if (err.code == YYJSON_WRITE_ERROR_INVALID_PARAMETER) {
         /** Invalid parameter, such as NULL document. */
         return "ERROR_INVALID_PARAMETER";
-
-    case YYJSON_WRITE_ERROR_MEMORY_ALLOCATION:
+    } else if (err.code == YYJSON_WRITE_ERROR_MEMORY_ALLOCATION) {
         /** Memory allocation failure occurs. */
         return "ERROR_MEMORY_ALLOCATION";
-
-    case YYJSON_WRITE_ERROR_INVALID_VALUE_TYPE:
+    } else if (err.code == YYJSON_WRITE_ERROR_INVALID_VALUE_TYPE) {
         /** Invalid value type in JSON document. */
         return "ERROR_INVALID_VALUE_TYPE";
-
-    case YYJSON_WRITE_ERROR_NAN_OR_INF:
+    } else if (err.code == YYJSON_WRITE_ERROR_NAN_OR_INF) {
         /** NaN or Infinity number occurs. */
         return "ERROR_NAN_OR_INF";
-
-    case YYJSON_WRITE_ERROR_FILE_OPEN:
+    } else if (err.code == YYJSON_WRITE_ERROR_FILE_OPEN) {
         /** Failed to open a file. */
         return "ERROR_FILE_OPEN";
-
-    case YYJSON_WRITE_ERROR_FILE_WRITE:
+    } else if (err.code == YYJSON_WRITE_ERROR_FILE_WRITE) {
         /** Failed to write a file. */
         return "ERROR_FILE_WRITE";
-
-    case YYJSON_WRITE_ERROR_INVALID_STRING:
+    } else if (err.code == YYJSON_WRITE_ERROR_INVALID_STRING) {
         /** Invalid unicode in string. */
         return "ERROR_INVALID_STRING";
-
-    default:
-        return "unsupported error code";
     }
+    return "unsupported error code";
 }
 
 static const char *ptr_err2name(yyjson_ptr_err err)
 {
-    switch (err.code) {
-    case YYJSON_PTR_ERR_NONE:
+    if (err.code == YYJSON_PTR_ERR_NONE) {
         /** No JSON pointer error. */
         return "ERR_NONE";
-
-    case YYJSON_PTR_ERR_PARAMETER:
+    } else if (err.code == YYJSON_PTR_ERR_PARAMETER) {
         /** Invalid input parameter, such as NULL input. */
         return "ERR_PARAMETER";
-
-    case YYJSON_PTR_ERR_SYNTAX:
+    } else if (err.code == YYJSON_PTR_ERR_SYNTAX) {
         /** JSON pointer syntax error, such as invalid escape, token no prefix.
          */
         return "ERR_SYNTAX";
-
-    case YYJSON_PTR_ERR_RESOLVE:
+    } else if (err.code == YYJSON_PTR_ERR_RESOLVE) {
         /** JSON pointer resolve failed, such as index out of range, key not
          * found. */
         return "ERR_RESOLVE";
-
-    case YYJSON_PTR_ERR_NULL_ROOT:
+    } else if (err.code == YYJSON_PTR_ERR_NULL_ROOT) {
         /** Document's root is NULL, but it is required for the function call.
          */
         return "ERR_NULL_ROOT";
-
-    case YYJSON_PTR_ERR_SET_ROOT:
+    } else if (err.code == YYJSON_PTR_ERR_SET_ROOT) {
         /** Cannot set root as the target is not a document. */
         return "ERR_SET_ROOT";
-
-    case YYJSON_PTR_ERR_MEMORY_ALLOCATION:
+    } else if (err.code == YYJSON_PTR_ERR_MEMORY_ALLOCATION) {
         /** The memory allocation failed and a new value could not be created.
          */
         return "ERR_MEMORY_ALLOCATION";
-
-    default:
-        return "unsupported error code";
     }
+    return "unsupported error code";
 }
 
 typedef struct {
