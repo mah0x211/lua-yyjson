@@ -648,10 +648,10 @@ static void build_path_string(lua_State *L, int pathidx, const char *prefix)
             }
 
             if (needs_esc) {
-                lua_pop(L, 1);
                 luaL_addchar(&b, '[');
                 addquoted(&b, k, klen);
                 luaL_addchar(&b, ']');
+                lua_pop(L, 1);
                 continue;
             }
             // Object key, use dot (assuming simple string keys for simplicity)
