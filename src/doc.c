@@ -438,6 +438,7 @@ static yyjson_mut_val *tovalue_object(yyjson_mut_doc *doc, lua_State *L,
 
             if (!key) {
                 // failed to alloc memory
+                lua_pop(L, 2);
                 return NULL;
             }
 
