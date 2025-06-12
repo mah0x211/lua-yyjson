@@ -498,6 +498,9 @@ static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L, int idx,
     }
     lua_pop(L, 1);
 
+    // add to circular reference tracking before any processing
+    push_table_ref(L, refidx, idx);
+
     // if the -1st element of a table is AS_ARRAY or AS_OBJECT, the
     // table is treated as that data type.
     lua_rawgeti(L, idx, -1);
@@ -511,8 +514,6 @@ static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L, int idx,
         }
     }
     lua_pop(L, 1);
-
-    push_table_ref(L, refidx, idx);
 
     if (lauxh_rawlen(L, idx)) {
 TREAT_AS_ARRAY:
