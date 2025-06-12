@@ -392,7 +392,7 @@ static yyjson_mut_val *tovalue_array(yyjson_mut_doc *doc, lua_State *L, int idx,
                 // fill spaces
                 for (lua_Integer n = 1; n < skip; n++) {
                     yyjson_mut_val *nullval = yyjson_mut_null(doc);
-                    if (!val) {
+                    if (!nullval) {
                         // failed to alloc memory
                         lua_pop(L, 2);
                         return NULL;
