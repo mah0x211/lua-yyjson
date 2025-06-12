@@ -392,7 +392,7 @@ static yyjson_mut_val *tovalue_array(yyjson_mut_doc *doc, lua_State *L, int idx,
                 // fill spaces
                 for (lua_Integer n = 1; n < skip; n++) {
                     yyjson_mut_val *nullval = yyjson_mut_null(doc);
-                    if (!val) {
+                    if (!nullval) {
                         // failed to alloc memory
                         lua_pop(L, 2);
                         return NULL;
@@ -438,6 +438,7 @@ static yyjson_mut_val *tovalue_object(yyjson_mut_doc *doc, lua_State *L,
 
             if (!key) {
                 // failed to alloc memory
+                lua_pop(L, 2);
                 return NULL;
             }
 
@@ -497,6 +498,9 @@ static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L, int idx,
     }
     lua_pop(L, 1);
 
+    // add to circular reference tracking before any processing
+    push_table_ref(L, refidx, idx);
+
     // if the -1st element of a table is AS_ARRAY or AS_OBJECT, the
     // table is treated as that data type.
     lua_rawgeti(L, idx, -1);
@@ -510,8 +514,6 @@ static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L, int idx,
         }
     }
     lua_pop(L, 1);
-
-    push_table_ref(L, refidx, idx);
 
     if (lauxh_rawlen(L, idx)) {
 TREAT_AS_ARRAY:
@@ -646,10 +648,10 @@ static void build_path_string(lua_State *L, int pathidx, const char *prefix)
             }
 
             if (needs_esc) {
-                lua_pop(L, 1);
                 luaL_addchar(&b, '[');
                 addquoted(&b, k, klen);
                 luaL_addchar(&b, ']');
+                lua_pop(L, 1);
                 continue;
             }
             // Object key, use dot (assuming simple string keys for simplicity)
