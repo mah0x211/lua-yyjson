@@ -23,6 +23,10 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <stdalign.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 // lua
 #include <lauxhlib.h>
 #include <lua_errno.h>
@@ -142,145 +146,103 @@ static const char *ptr_err2name(yyjson_ptr_err err)
 }
 
 typedef struct {
-    lua_State *L;
-    int ref;
-    lua_State *th;
-    lua_Alloc allocf;
-    void *ud;
     yyjson_alc alc;
     size_t usesize;
     size_t maxsize;
-    int nomem;
 } memalloc_t;
 
 /* Same as libc's malloc(), should not be NULL. */
-static void *malloc_lua(void *ctx, size_t size)
+static void *do_malloc(void *ctx, size_t size)
 {
-    memalloc_t *m = (memalloc_t *)ctx;
-    lua_State *L  = m->th;
-    void *ptr     = NULL;
+    memalloc_t *m     = (memalloc_t *)ctx;
+    size_t allocsize  = sizeof(max_align_t) + size;
+    max_align_t *head = NULL;
 
-    if (m->maxsize &&
-        (SIZE_MAX - size < m->usesize || size + m->usesize > m->maxsize)) {
+    // check overflow and maximum size limit
+    if (allocsize < size ||
+        (m->maxsize && (SIZE_MAX - allocsize < m->usesize ||
+                        allocsize + m->usesize > m->maxsize))) {
         // reached to maximum memory limit
-        m->nomem = 1;
         return NULL;
     }
 
-    ptr = m->allocf(m->ud, NULL, 0, size);
-    if (ptr) {
+    head = (max_align_t *)malloc(allocsize);
+    if (head) {
+        // update the memory usage
+        m->usesize += allocsize;
         // keep alloc size
-        // buffer for hexadecimal string 0xFFFFFFFFFFFFFFFF
-        char b[20]  = {};
-        size_t blen = snprintf(b, sizeof(b), "%p", ptr);
-        size_t *sz  = NULL;
-
-        m->usesize += size;
-        lua_pushlstring(L, b, blen);
-        sz  = (size_t *)lua_newuserdata(L, sizeof(size_t));
-        *sz = size;
-        lua_rawset(L, 1);
-    } else {
-        m->nomem = 1;
+        *((size_t *)head) = allocsize;
+        return (void *)(head + 1);
     }
-
-    return ptr;
+    // failed to alloc memory
+    return NULL;
 }
 
 /* Same as libc's realloc(), should not be NULL. */
-static void *realloc_lua(void *ctx, void *ptr, size_t old_size, size_t size)
+static void *do_realloc(void *ctx, void *ptr, size_t old_size, size_t size)
 {
-    (void)old_size;
-    memalloc_t *m = (memalloc_t *)ctx;
-    lua_State *L  = m->th;
-    char b[20]    = {};
-    size_t blen   = 0;
-    size_t *sz    = NULL;
-    void *newptr  = NULL;
+    memalloc_t *m         = (memalloc_t *)ctx;
+    size_t allocsize      = sizeof(max_align_t) + size;
+    max_align_t *old_head = (max_align_t *)ptr - 1;
+    max_align_t *new_head = NULL;
 
-    if (m->maxsize &&
-        (SIZE_MAX - size < m->usesize || size + m->usesize > m->maxsize)) {
+    // set actual old size
+    old_size = *((size_t *)old_head);
+
+    // check overflow and maximum size limit
+    if (allocsize < size ||
+        (m->maxsize && (SIZE_MAX - allocsize < m->usesize ||
+                        allocsize + m->usesize > m->maxsize))) {
         // reached to maximum memory limit
-        m->nomem = 1;
         return NULL;
     }
 
-    // get alloc size
-    blen = snprintf(b, sizeof(b), "%p", ptr);
-    lua_pushlstring(L, b, blen);
-    lua_pushvalue(L, 2);
-    lua_rawget(L, 1);
-    sz     = (size_t *)lua_topointer(L, -1);
     // realloc
-    newptr = m->allocf(m->ud, ptr, *sz, size);
-    if (newptr) {
-        // remove old alloc size
-        lua_pushvalue(L, 2);
-        lua_pushnil(L);
-        lua_rawset(L, 1);
-
+    new_head = (max_align_t *)realloc(old_head, allocsize);
+    if (new_head) {
+        // update the memory usage
+        m->usesize            = m->usesize - old_size + allocsize;
         // keep new alloc size
-        m->usesize = m->usesize - *sz + size;
-        *sz        = size;
-        blen       = snprintf(b, sizeof(b), "%p", newptr);
-        lua_pushlstring(L, b, blen);
-        lua_replace(L, 2);
-        lua_rawset(L, 1);
-    } else {
-        m->nomem = 1;
-        lua_settop(L, 1);
+        *((size_t *)new_head) = allocsize;
+        return (void *)(new_head + 1);
     }
 
-    return newptr;
+    // failed to realloc memory
+    return NULL;
 }
 
 /* Same as libc's free(), should not be NULL. */
-static void free_lua(void *ctx, void *ptr)
+static void do_free(void *ctx, void *ptr)
 {
-    memalloc_t *m = (memalloc_t *)ctx;
-    lua_State *L  = m->th;
-    char b[20]    = {};
-    size_t blen   = snprintf(b, sizeof(b), "%p", ptr);
-    size_t size   = 0;
+    memalloc_t *m     = (memalloc_t *)ctx;
+    max_align_t *head = (max_align_t *)ptr - 1;
+    size_t freesize   = *((size_t *)head);
 
-    // get alloc size
-    lua_pushlstring(L, b, blen);
-    lua_pushvalue(L, 2);
-    lua_rawget(L, 1);
-    size = *(size_t *)lua_topointer(L, -1);
-    lua_pop(L, 1);
-    // remove alloc size
-    lua_pushnil(L);
-    lua_rawset(L, 1);
     // free
-    m->allocf(m->ud, ptr, size, 0);
-    m->usesize -= size;
+    free(head);
+    m->usesize -= freesize;
 }
 
 static void memalloc_dispose(memalloc_t *m)
 {
-    assert(m->usesize == 0);
-    lauxh_unref(m->L, m->ref);
+    // All tracked allocations should have been released already.
+    if (m->usesize > 0) {
+        // Memory leak detected - print a warning message
+        fprintf(stderr,
+                "yyjson: memory leak detected: "
+                " %zu bytes still allocated after disposal.\n",
+                m->usesize);
+    }
 }
 
-static void memalloc_init(memalloc_t *m, lua_State *L, size_t maxsize)
+static void memalloc_init(memalloc_t *m, size_t maxsize)
 {
-    m->L      = L;
-    m->allocf = lua_getallocf(L, &m->ud);
-    m->th     = lua_newthread(L);
-    m->ref    = lauxh_ref(L);
-
-    // create the table that keeps alloc size of each pointer
-    // key: pointer address in representation of hexadecimal string
-    // value: alloc size that is stored in size_t*
-    lua_newtable(m->th);
-    m->alc.malloc  = malloc_lua;
-    m->alc.realloc = realloc_lua;
-    m->alc.free    = free_lua;
+    m->alc.malloc  = do_malloc;
+    m->alc.realloc = do_realloc;
+    m->alc.free    = do_free;
     m->alc.ctx     = (void *)m;
     m->usesize     = 0;
     m->maxsize     = maxsize;
-    m->nomem       = 0;
 }
 
 #define AS_OBJECT_MT "yyjson.as_object"
@@ -581,6 +543,14 @@ static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, int idx,
 /**
  * NOTE: This function is used to escape strings that copy from Lua source code.
  * https://github.com/lua/lua/blob/v5.4.7/lstrlib.c#L1122-L1142
+ *
+ * @brief Adds a quoted string to the Lua buffer.
+ * This function escapes special characters like quotes, backslashes, and
+ * control characters in the string.
+ *
+ * @param b Pointer to the Lua buffer where the quoted string will be added.
+ * @param s Pointer to the NUL-terminated string to be quoted.
+ * @param len Length of the string to be quoted.
  */
 static void addquoted(luaL_Buffer *b, const char *s, size_t len)
 {
@@ -995,7 +965,7 @@ static int new_lua(lua_State *L)
     y->ref_str = LUA_NOREF;
     y->doc     = NULL;
     y->mdoc    = NULL;
-    memalloc_init(&y->mem, L, (maxsize < 0) ? 0 : (size_t)maxsize);
+    memalloc_init(&y->mem, (maxsize < 0) ? 0 : (size_t)maxsize);
     lauxh_setmetatable(L, MODULE_MT);
 
     if (len) {
