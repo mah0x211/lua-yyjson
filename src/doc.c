@@ -21,18 +21,17 @@
  *
  */
 
+// project
+#include "yyjson.h"
+// depend
+#include "lauxhlib.h"
+#include "lua_errno.h"
+#include "lua_error.h"
+// lua
+#include <lauxlib.h>
+// system
 #include <assert.h>
 #include <ctype.h>
-#include <stdalign.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-// lua
-#include <lauxhlib.h>
-#include <lua_errno.h>
-#include <lua_error.h>
-// yyjson
-#include "yyjson.h"
 
 static const char *read_err2name(yyjson_read_err err)
 {
