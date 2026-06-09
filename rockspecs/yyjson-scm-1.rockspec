@@ -13,24 +13,40 @@ description = {
 }
 dependencies = {
     "lua >= 5.1",
-    "lauxhlib >= 0.3.1",
+    "lauxhlib >= 0.6.0",
     "errno >= 0.5.0",
     "error >= 0.14.0",
 }
+build_dependencies = {
+    "luarocks-build-hooks >= 0.8.0",
+}
 build = {
-    type = "make",
-    build_variables = {
-        LIB_EXTENSION = "$(LIB_EXTENSION)",
-        CFLAGS = "$(CFLAGS)",
-        WARNINGS = "-Wall -Wno-trigraphs -Wmissing-field-initializers -Wreturn-type -Wmissing-braces -Wparentheses -Wno-switch -Wunused-function -Wunused-label -Wunused-parameter -Wunused-variable -Wunused-value -Wuninitialized -Wunknown-pragmas -Wshadow -Wsign-compare",
-        CPPFLAGS = "-I$(LUA_INCDIR) -I./deps/yyjson/src/",
-        LDFLAGS = "$(LIBFLAG)",
-        YYJSON_COVERAGE = "$(YYJSON_COVERAGE)",
+    type = "hooks",
+    before_build = {
+        "$(extra-vars)",
     },
-    install_variables = {
-        LIB_EXTENSION = "$(LIB_EXTENSION)",
-        INST_LIBDIR = "$(LIBDIR)/yyjson",
-        INST_LUADIR = "$(LUADIR)",
-        LUA_INCDIR = "$(LUA_INCDIR)",
+    extra_variables = {
+        CFLAGS = "-Wall -Wno-trigraphs -Wmissing-field-initializers -Wreturn-type -Wmissing-braces -Wparentheses -Wno-switch -Wunused-function -Wunused-label -Wunused-parameter -Wunused-variable -Wunused-value -Wuninitialized -Wunknown-pragmas -Wshadow -Wsign-compare",
+    },
+    conditional_variables = {
+        YYJSON_COVERAGE = {
+            CFLAGS = "--coverage",
+            LIBFLAG = "--coverage",
+        },
+    },
+    modules = {
+        ["yyjson"] = "yyjson.lua",
+        ["yyjson.doc"] = {
+            sources = {
+                "src/doc.c",
+                "deps/yyjson/src/yyjson.c",
+            },
+            incdirs = {
+                "deps/yyjson/src",
+                "$(DEP_LAUXHLIB_INCDIR)",
+                "$(DEP_ERRNO_INCDIR)",
+                "$(DEP_ERROR_INCDIR)",
+            },
+        },
     },
 }
