@@ -248,12 +248,14 @@ static void memalloc_init(memalloc_t *m, size_t maxsize)
 #define AS_ARRAY_MT  "yyjson.as_array"
 #define AS_NULL_MT   "yyjson.null"
 
-static void *AS_OBJECT   = NULL;
-static void *AS_ARRAY    = NULL;
-static void *AS_NULL     = NULL;
-static int AS_OBJECT_REF = LUA_NOREF;
-static int AS_ARRAY_REF  = LUA_NOREF;
-static int AS_NULL_REF   = LUA_NOREF;
+typedef struct {
+    const void *as_object;
+    const void *as_array;
+    const void *as_null;
+    int as_object_ref;
+    int as_array_ref;
+    int as_null_ref;
+} aux_t;
 
 #define tostring_lua(L, tname)                                                 \
     do {                                                                       \
@@ -281,37 +283,50 @@ static int null_tostring_lua(lua_State *L)
 
 #undef tostring_lua
 
-static inline void init_aux_objects(lua_State *L)
+static inline aux_t *new_aux_objects(lua_State *L)
 {
+    aux_t *aux = (aux_t *)lua_newuserdata(L, sizeof(aux_t));
+    *aux       = (aux_t){
+        .as_object     = NULL,
+        .as_array      = NULL,
+        .as_null       = NULL,
+        .as_object_ref = LUA_NOREF,
+        .as_array_ref  = LUA_NOREF,
+        .as_null_ref   = LUA_NOREF,
+    };
+
     // create auxiliary object metatables
-    AS_OBJECT = lua_newuserdata(L, 0);
+    aux->as_object = lua_newuserdata(L, 0);
     luaL_newmetatable(L, AS_OBJECT_MT);
     lauxh_pushfn2tbl(L, "__tostring", object_tostring_lua);
     lua_setmetatable(L, -2);
-    AS_OBJECT_REF = lauxh_ref(L);
+    aux->as_object_ref = lauxh_ref(L);
 
-    AS_ARRAY = lua_newuserdata(L, 0);
+    aux->as_array = lua_newuserdata(L, 0);
     luaL_newmetatable(L, AS_ARRAY_MT);
     lauxh_pushfn2tbl(L, "__tostring", array_tostring_lua);
     lua_setmetatable(L, -2);
-    AS_ARRAY_REF = lauxh_ref(L);
+    aux->as_array_ref = lauxh_ref(L);
 
-    AS_NULL = lua_newuserdata(L, 0);
+    aux->as_null = lua_newuserdata(L, 0);
     luaL_newmetatable(L, AS_NULL_MT);
     lauxh_pushfn2tbl(L, "__tostring", null_tostring_lua);
     lua_setmetatable(L, -2);
-    AS_NULL_REF = lauxh_ref(L);
+    aux->as_null_ref = lauxh_ref(L);
+
+    return aux;
 }
 
 #define TV_OK              0x0
 #define TV_FOUND_CIRCULAR  0x1
 #define TV_FOUND_NOSUPPORT 0x2
 
-static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, int idx,
-                               int refidx, int *tv_status);
+static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, aux_t *aux,
+                               int idx, int refidx, int *tv_status);
 
-static yyjson_mut_val *tovalue_array(yyjson_mut_doc *doc, lua_State *L, int idx,
-                                     int refidx, int *tv_status)
+static yyjson_mut_val *tovalue_array(yyjson_mut_doc *doc, lua_State *L,
+                                     aux_t *aux, int idx, int refidx,
+                                     int *tv_status)
 {
     size_t tail         = lauxh_rawlen(L, refidx) + 1;
     yyjson_mut_val *bin = yyjson_mut_arr(doc);
@@ -338,7 +353,7 @@ static yyjson_mut_val *tovalue_array(yyjson_mut_doc *doc, lua_State *L, int idx,
             lua_rawseti(L, refidx, tail);
 
             // recursively convert the value
-            val = tovalue(doc, L, lua_gettop(L), refidx, tv_status);
+            val = tovalue(doc, L, aux, lua_gettop(L), refidx, tv_status);
             if (!val) {
                 if ((*tv_status & TV_FOUND_NOSUPPORT) == 0) {
                     // circular reference detected or allocation error
@@ -376,7 +391,8 @@ static yyjson_mut_val *tovalue_array(yyjson_mut_doc *doc, lua_State *L, int idx,
 }
 
 static yyjson_mut_val *tovalue_object(yyjson_mut_doc *doc, lua_State *L,
-                                      int idx, int refidx, int *tv_status)
+                                      aux_t *aux, int idx, int refidx,
+                                      int *tv_status)
 {
     size_t tail         = lauxh_rawlen(L, refidx) + 1;
     yyjson_mut_val *bin = yyjson_mut_obj(doc);
@@ -408,7 +424,7 @@ static yyjson_mut_val *tovalue_object(yyjson_mut_doc *doc, lua_State *L,
             lua_pushvalue(L, -2);
             lua_rawseti(L, refidx, tail);
 
-            val = tovalue(doc, L, lua_gettop(L), refidx, tv_status);
+            val = tovalue(doc, L, aux, lua_gettop(L), refidx, tv_status);
             if (val) {
                 yyjson_mut_obj_add(bin, key, val);
             } else if ((*tv_status & TV_FOUND_NOSUPPORT) == 0) {
@@ -443,8 +459,9 @@ static yyjson_mut_val *tovalue_object(yyjson_mut_doc *doc, lua_State *L,
         lua_rawset(L, refidx);                                                 \
     } while (0)
 
-static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L, int idx,
-                                     int refidx, int *tv_status)
+static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L,
+                                     aux_t *aux, int idx, int refidx,
+                                     int *tv_status)
 {
     yyjson_mut_val *bin = NULL;
 
@@ -468,9 +485,9 @@ static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L, int idx,
     if (lua_type(L, -1) == LUA_TUSERDATA) {
         const void *ptr = lua_topointer(L, -1);
         lua_pop(L, 1);
-        if (ptr == AS_OBJECT) {
+        if (ptr == aux->as_object) {
             goto TREAT_AS_OBJECT;
-        } else if (ptr == AS_ARRAY) {
+        } else if (ptr == aux->as_array) {
             goto TREAT_AS_ARRAY;
         }
     }
@@ -479,11 +496,11 @@ static yyjson_mut_val *tovalue_table(yyjson_mut_doc *doc, lua_State *L, int idx,
     if (lauxh_rawlen(L, idx)) {
 TREAT_AS_ARRAY:
         // as array
-        bin = tovalue_array(doc, L, idx, refidx, tv_status);
+        bin = tovalue_array(doc, L, aux, idx, refidx, tv_status);
     } else {
 TREAT_AS_OBJECT:
         // as object
-        bin = tovalue_object(doc, L, idx, refidx, tv_status);
+        bin = tovalue_object(doc, L, aux, idx, refidx, tv_status);
     }
 
     pop_table_ref(L, refidx, idx);
@@ -494,8 +511,8 @@ TREAT_AS_OBJECT:
 #undef push_table_ref
 #undef pop_table_ref
 
-static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, int idx,
-                               int refidx, int *tv_status)
+static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, aux_t *aux,
+                               int idx, int refidx, int *tv_status)
 {
     switch (lua_type(L, idx)) {
     case LUA_TNIL:
@@ -521,7 +538,7 @@ static yyjson_mut_val *tovalue(yyjson_mut_doc *doc, lua_State *L, int idx,
     }
 
     case LUA_TTABLE:
-        return tovalue_table(doc, L, idx, refidx, tv_status);
+        return tovalue_table(doc, L, aux, idx, refidx, tv_status);
 
     case LUA_TUSERDATA:
         if (lauxh_isuserdataof(L, idx, AS_NULL_MT)) {
@@ -640,6 +657,7 @@ typedef struct {
     memalloc_t mem;
     yyjson_mut_doc *mdoc;
     yyjson_doc *doc;
+    aux_t *aux;
 } lyyjson_doc_t;
 
 static inline int absidx(lua_State *L, int idx)
@@ -680,7 +698,8 @@ static int set_lua(lua_State *L)
         // convert specified value
         lua_newtable(L);
         lua_pushvalue(L, 3);
-        newval = tovalue(y->mdoc, L, absidx(L, -1), absidx(L, -2), &tv_status);
+        newval = tovalue(y->mdoc, L, y->aux, absidx(L, -1), absidx(L, -2),
+                         &tv_status);
         if (!newval) {
             const char *errmsg = NULL;
 
@@ -731,17 +750,17 @@ static int set_lua(lua_State *L)
     return 2;
 }
 
-static int get_mut_value(lua_State *L, yyjson_mut_val *val, const int with_null,
-                         const int with_ref);
-static int get_value(lua_State *L, yyjson_val *val, const int with_null,
-                     const int with_ref);
+static int get_mut_value(lua_State *L, aux_t *aux, yyjson_mut_val *val,
+                         const int with_null, const int with_ref);
+static int get_value(lua_State *L, aux_t *aux, yyjson_val *val,
+                     const int with_null, const int with_ref);
 
-#define GET_VALUE(L, vtype, v, with_null, with_ref)                            \
+#define GET_VALUE(L, aux, vtype, v, with_null, with_ref)                       \
     do {                                                                       \
         switch (yyjson##vtype##get_type((v))) {                                \
         case YYJSON_TYPE_NULL:                                                 \
             if (with_null) {                                                   \
-                lauxh_pushref(L, AS_NULL_REF);                                 \
+                lauxh_pushref(L, (aux)->as_null_ref);                          \
                 return 1;                                                      \
             }                                                                  \
         case YYJSON_TYPE_NONE:                                                 \
@@ -785,12 +804,12 @@ static int get_value(lua_State *L, yyjson_val *val, const int with_null,
             }                                                                  \
             lua_createtable(L, it.max, 0);                                     \
             if (with_ref) {                                                    \
-                lauxh_pushref(L, AS_ARRAY_REF);                                \
+                lauxh_pushref(L, (aux)->as_array_ref);                         \
                 lua_rawseti(L, -2, -1);                                        \
             }                                                                  \
             while ((_val = yyjson##vtype##arr_iter_next(&it))) {               \
-                if ((rc = get##vtype##value(L, _val, with_null, with_ref)) >   \
-                    1) {                                                       \
+                if ((rc = get##vtype##value(L, aux, _val, with_null,           \
+                                            with_ref)) > 1) {                  \
                     return rc;                                                 \
                 }                                                              \
                 lua_rawseti(L, -2, it.idx);                                    \
@@ -812,13 +831,13 @@ static int get_value(lua_State *L, yyjson_val *val, const int with_null,
             }                                                                  \
             lua_createtable(L, 0, it.max);                                     \
             if (with_ref) {                                                    \
-                lauxh_pushref(L, AS_OBJECT_REF);                               \
+                lauxh_pushref(L, (aux)->as_object_ref);                        \
                 lua_rawseti(L, -2, -1);                                        \
             }                                                                  \
             while ((key = yyjson##vtype##obj_iter_next(&it))) {                \
                 typeof(v) _val = yyjson##vtype##obj_iter_get_val(key);         \
-                if ((rc = get##vtype##value(L, _val, with_null, with_ref)) >   \
-                    1) {                                                       \
+                if ((rc = get##vtype##value(L, aux, _val, with_null,           \
+                                            with_ref)) > 1) {                  \
                     return rc;                                                 \
                 }                                                              \
                 lua_setfield(L, -2, yyjson##vtype##get_str(key));              \
@@ -837,16 +856,16 @@ static int get_value(lua_State *L, yyjson_val *val, const int with_null,
         }                                                                      \
     } while (0)
 
-static int get_mut_value(lua_State *L, yyjson_mut_val *val, const int with_null,
-                         const int with_ref)
+static int get_mut_value(lua_State *L, aux_t *aux, yyjson_mut_val *val,
+                         const int with_null, const int with_ref)
 {
-    GET_VALUE(L, _mut_, val, with_null, with_ref);
+    GET_VALUE(L, aux, _mut_, val, with_null, with_ref);
 }
 
-static int get_value(lua_State *L, yyjson_val *val, const int with_null,
-                     const int with_ref)
+static int get_value(lua_State *L, aux_t *aux, yyjson_val *val,
+                     const int with_null, const int with_ref)
 {
-    GET_VALUE(L, _, val, with_null, with_ref);
+    GET_VALUE(L, aux, _, val, with_null, with_ref);
 }
 
 #undef GET_VALUE
@@ -888,8 +907,8 @@ static int get_lua(lua_State *L)
     }
 
     lua_settop(L, 1);
-    return (mval) ? get_mut_value(L, mval, with_null, with_ref) :
-                    get_value(L, val, with_null, with_ref);
+    return (mval) ? get_mut_value(L, y->aux, mval, with_null, with_ref) :
+                    get_value(L, y->aux, val, with_null, with_ref);
 }
 
 static int stringify_lua(lua_State *L)
@@ -955,6 +974,7 @@ static int gc_lua(lua_State *L)
 
 static int new_lua(lua_State *L)
 {
+    aux_t *aux           = (aux_t *)lua_touserdata(L, lua_upvalueindex(1));
     size_t len           = 0;
     const char *str      = lauxh_optlstr(L, 1, NULL, &len);
     lua_Integer maxsize  = lauxh_optinteger(L, 2, 0);
@@ -964,6 +984,7 @@ static int new_lua(lua_State *L)
     y->ref_str = LUA_NOREF;
     y->doc     = NULL;
     y->mdoc    = NULL;
+    y->aux     = aux;
     memalloc_init(&y->mem, (maxsize < 0) ? 0 : (size_t)maxsize);
     lauxh_setmetatable(L, MODULE_MT);
 
@@ -1004,6 +1025,31 @@ static int new_lua(lua_State *L)
     return 1;
 }
 
+/// Returns the per-state aux singleton, creating it on first call.
+/// The aux userdata is anchored in the Lua registry under the address of
+/// this function as the key, so it survives until the Lua state is closed
+/// regardless of module table or yyjson.doc instance lifetimes.
+static aux_t *get_or_create_aux(lua_State *L)
+{
+    lua_pushlightuserdata(L, (void *)get_or_create_aux);
+    lua_rawget(L, LUA_REGISTRYINDEX);
+    if (lua_type(L, -1) == LUA_TUSERDATA) {
+        aux_t *aux = (aux_t *)lua_touserdata(L, -1);
+        lua_pop(L, 1);
+        return aux;
+    }
+    lua_pop(L, 1);
+
+    aux_t *aux = new_aux_objects(L);
+    // anchor aux userdata in the registry so it (and its AS_*_REF entries)
+    // outlive every yyjson.doc and module table in this state.
+    lua_pushlightuserdata(L, (void *)get_or_create_aux);
+    lua_pushvalue(L, -2);
+    lua_rawset(L, LUA_REGISTRYINDEX);
+    lua_pop(L, 1); // pop aux userdata; pointer is still valid via registry
+    return aux;
+}
+
 LUALIB_API int luaopen_yyjson_doc(lua_State *L)
 {
     struct luaL_Reg mmethod[] = {
@@ -1034,20 +1080,25 @@ LUALIB_API int luaopen_yyjson_doc(lua_State *L)
     lua_pop(L, 1);
 
     lua_errno_loadlib(L);
-    init_aux_objects(L);
+
+    // Per-state aux singleton: created once and anchored in the registry so
+    // it persists across module reloads and outlives every yyjson.doc.
+    aux_t *aux = get_or_create_aux(L);
 
     lua_newtable(L);
     // export functions
-    lauxh_pushfn2tbl(L, "new", new_lua);
+    lua_pushlightuserdata(L, aux);
+    lua_pushcclosure(L, new_lua, 1);
+    lua_setfield(L, -2, "new");
 
     // export symbols
-    lauxh_pushref(L, AS_OBJECT_REF);
+    lauxh_pushref(L, aux->as_object_ref);
     lua_setfield(L, -2, "AS_OBJECT");
 
-    lauxh_pushref(L, AS_ARRAY_REF);
+    lauxh_pushref(L, aux->as_array_ref);
     lua_setfield(L, -2, "AS_ARRAY");
 
-    lauxh_pushref(L, AS_NULL_REF);
+    lauxh_pushref(L, aux->as_null_ref);
     lua_setfield(L, -2, "NULL");
 
     /** Options for JSON reader. */
