@@ -227,3 +227,102 @@ function testcase.memory_limit_decode()
     assert.is_nil(v)
     assert.match(err, 'ENOMEM')
 end
+
+function testcase.decode_with_bom()
+    -- test that READ_ALLOW_BOM consumes a UTF-8 BOM before the JSON document
+    local s = '\239\187\191{"a":1}'
+
+    -- without the flag, the BOM byte is rejected
+    local v, err = yyjson.decode(s)
+    assert.is_nil(v)
+    assert.match(err, 'EINVAL')
+
+    -- with the flag, the BOM is ignored and parsing succeeds
+    v, err = yyjson.decode(s, nil, nil, nil, yyjson.READ_ALLOW_BOM)
+    assert.is_nil(err)
+    assert.equal(v, {
+        a = 1,
+    })
+end
+
+function testcase.decode_single_quoted_string()
+    local s = "{\"key\":'value'}"
+
+    -- without the flag, single-quoted strings are rejected
+    local v, err = yyjson.decode(s)
+    assert.is_nil(v)
+    assert.match(err, 'EINVAL')
+
+    -- with the flag, single-quoted strings are accepted
+    v, err =
+        yyjson.decode(s, nil, nil, nil, yyjson.READ_ALLOW_SINGLE_QUOTED_STR)
+    assert.is_nil(err)
+    assert.equal(v, {
+        key = 'value',
+    })
+end
+
+function testcase.decode_unquoted_key()
+    local s = '{key:"value"}'
+
+    -- without the flag, unquoted keys are rejected
+    local v, err = yyjson.decode(s)
+    assert.is_nil(v)
+    assert.match(err, 'EINVAL')
+
+    -- with the flag, unquoted keys are accepted
+    v, err = yyjson.decode(s, nil, nil, nil, yyjson.READ_ALLOW_UNQUOTED_KEY)
+    assert.is_nil(err)
+    assert.equal(v, {
+        key = 'value',
+    })
+end
+
+function testcase.decode_ext_number()
+    local s = '{"hex":0x7B,"plus":+1.5}'
+
+    -- without the flag, hex and explicit positive sign are rejected
+    local v, err = yyjson.decode(s)
+    assert.is_nil(v)
+    assert.match(err, 'EINVAL')
+
+    -- with the flag, extended number formats are accepted
+    v, err = yyjson.decode(s, nil, nil, nil, yyjson.READ_ALLOW_EXT_NUMBER)
+    assert.is_nil(err)
+    assert.equal(v.hex, 123)
+    assert.equal(v.plus, 1.5)
+end
+
+function testcase.decode_json5()
+    local s = "{ a: 'hello', b: 1, /* comment */ }"
+
+    -- without the flag, JSON5 syntax is rejected
+    local v, err = yyjson.decode(s)
+    assert.is_nil(v)
+    assert.match(err, 'EINVAL')
+
+    -- READ_JSON5 enables comments, trailing commas, single-quoted strings,
+    -- unquoted keys, extended numbers/escapes/whitespace and inf/nan literals
+    -- in one combined flag
+    v, err = yyjson.decode(s, nil, nil, nil, yyjson.READ_JSON5)
+    assert.is_nil(err)
+    assert.equal(v, {
+        a = 'hello',
+        b = 1,
+    })
+end
+
+function testcase.encode_fp_to_float()
+    -- pick a value with enough precision to show the difference between
+    -- double and float output
+    local v = 3.14159265358979
+
+    -- default encoding writes the value with double precision
+    local s = assert(yyjson.encode(v))
+    assert.equal(s, '3.14159265358979')
+
+    -- WRITE_FP_TO_FLOAT downcasts to single precision, producing the
+    -- shorter representation that round-trips through float
+    s = assert(yyjson.encode(v, nil, yyjson.WRITE_FP_TO_FLOAT))
+    assert.equal(s, '3.1415927')
+end

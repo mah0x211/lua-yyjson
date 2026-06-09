@@ -5,6 +5,8 @@
 
 lua bindings for https://github.com/ibireme/yyjson.
 
+This release bundles [yyjson 0.12.0](https://github.com/ibireme/yyjson/releases/tag/0.12.0).
+
 
 ## Installation
 
@@ -152,7 +154,8 @@ encode a Lua value `v` to a JSON string.
 | `yyjson.WRITE_INF_AND_NAN_AS_NULL` | Write `inf` and `nan` number as `null` literal.<br>This flag will override `yyjson.WRITE_ALLOW_INF_AND_NAN` flag. |
 | `yyjson.WRITE_ALLOW_INVALID_UNICODE` | Allow invalid unicode when encoding string values (non-standard).<br>Invalid characters in string value will be copied byte by byte.<br>If `WRITE_ESCAPE_UNICODE` flag is also set, invalid character will be escaped as `U+FFFD` (replacement character).<br>This flag does not affect the performance of correctly encoded strings. |
 | `yyjson.WRITE_PRETTY_TWO_SPACES` | Write JSON pretty with 2 space indent.<br>This flag will override  `WRITE_PRETTY` flag. |
-| `yyjson.WRITE_NEWLINE_AT_END` | Adds a newline character `\n` at the end of the JSON.<br>This can be helpful for text editors or NDJSON | 
+| `yyjson.WRITE_NEWLINE_AT_END` | Adds a newline character `\n` at the end of the JSON.<br>This can be helpful for text editors or NDJSON |
+| `yyjson.WRITE_FP_TO_FLOAT` | Write floating-point numbers using single-precision (`float`) instead of double-precision. Can produce shorter output for values that fit. |
 
 
 **Returns**
@@ -198,6 +201,13 @@ decode a JSON string `s` to a Lua value.
 | `yyjson.READ_NUMBER_AS_RAW` | Read number as raw string (value with `YYJSON_TYPE_RAW` type), `inf`/`nan` literal is also read as raw with `ALLOW_INF_AND_NAN` flag. |
 | `yyjson.READ_ALLOW_INVALID_UNICODE` | Allow reading invalid unicode when parsing string values.<br>Invalid characters will be allowed to appear in the string values, but invalid escape sequences will still be reported as errors.<br>This flag does not affect the performance of correctly encoded strings.<br>**@warning** Strings in JSON values may contain incorrect encoding when this option is used, you need to handle these strings carefully to avoid security risks. |
 | `yyjson.READ_BIGNUM_AS_RAW` | Read big numbers as raw strings.<br>These big numbers include integers that cannot be represented by `int64_t` and `uint64_t`, and floating-point numbers that cannot be represented by finite `double`.<br>The flag will be overridden by `yyjson.READ_NUMBER_AS_RAW` flag. |
+| `yyjson.READ_ALLOW_BOM` | Allow a leading UTF-8 byte order mark (`BOM`) before the JSON document. The `BOM` is consumed and ignored. |
+| `yyjson.READ_ALLOW_EXT_NUMBER` | Allow extended numeric formats: hexadecimal (`0x7B`), explicit positive sign (`+1`), leading dot (`.5`), trailing dot (`5.`). Conforms to JSON5. |
+| `yyjson.READ_ALLOW_EXT_ESCAPE` | Allow extended escape sequences inside strings, such as `\a`, `\0`, `\v`, and `\xNN` hex escapes. Conforms to JSON5. |
+| `yyjson.READ_ALLOW_EXT_WHITESPACE` | Allow extended whitespace characters such as `\v` and `\u2028` in addition to the standard space, tab, CR and LF. Conforms to JSON5. |
+| `yyjson.READ_ALLOW_SINGLE_QUOTED_STR` | Allow single-quoted strings such as `'abc'` in addition to double-quoted strings. Conforms to JSON5. |
+| `yyjson.READ_ALLOW_UNQUOTED_KEY` | Allow unquoted object keys when the key is a valid ECMAScript identifier, such as `{a:1}`. Conforms to JSON5. |
+| `yyjson.READ_JSON5` | Enable full JSON5 support by combining all relaxed read flags above plus comments, trailing commas, and `inf`/`nan` literals. |
 
 **Returns**
 
