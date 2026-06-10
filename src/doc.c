@@ -1146,6 +1146,37 @@ LUALIB_API int luaopen_yyjson_doc(lua_State *L)
      * overridden by `YYJSON_READ_NUMBER_AS_RAW` flag. */
     lauxh_pushint2tbl(L, "READ_BIGNUM_AS_RAW", YYJSON_READ_BIGNUM_AS_RAW);
 
+    /** Allow a leading UTF-8 byte order mark (BOM) before the JSON document.
+        BOM is consumed and ignored. */
+    lauxh_pushint2tbl(L, "READ_ALLOW_BOM", YYJSON_READ_ALLOW_BOM);
+
+    /** Allow extended numeric formats: hexadecimal (0x7B), explicit positive
+        sign (+1), leading dot (.5), trailing dot (5.). Conforms to JSON5. */
+    lauxh_pushint2tbl(L, "READ_ALLOW_EXT_NUMBER", YYJSON_READ_ALLOW_EXT_NUMBER);
+
+    /** Allow extended escape sequences inside strings, such as \a, \0, \v,
+        and \xNN hex escapes. Conforms to JSON5. */
+    lauxh_pushint2tbl(L, "READ_ALLOW_EXT_ESCAPE", YYJSON_READ_ALLOW_EXT_ESCAPE);
+
+    /** Allow extended whitespace characters such as \v and \u2028 in addition
+        to the standard space, tab, CR and LF. Conforms to JSON5. */
+    lauxh_pushint2tbl(L, "READ_ALLOW_EXT_WHITESPACE",
+                      YYJSON_READ_ALLOW_EXT_WHITESPACE);
+
+    /** Allow single-quoted strings such as 'abc' in addition to double-quoted
+        strings. Conforms to JSON5. */
+    lauxh_pushint2tbl(L, "READ_ALLOW_SINGLE_QUOTED_STR",
+                      YYJSON_READ_ALLOW_SINGLE_QUOTED_STR);
+
+    /** Allow unquoted object keys when the key is a valid ECMAScript
+        identifier, such as {a:1}. Conforms to JSON5. */
+    lauxh_pushint2tbl(L, "READ_ALLOW_UNQUOTED_KEY",
+                      YYJSON_READ_ALLOW_UNQUOTED_KEY);
+
+    /** Enable full JSON5 support by combining all relaxed read flags above
+        plus comments, trailing commas, and inf/nan literals. */
+    lauxh_pushint2tbl(L, "READ_JSON5", YYJSON_READ_JSON5);
+
     /** Result code for JSON reader. */
     /** Success, no error. */
     lauxh_pushint2tbl(L, "READ_SUCCESS", YYJSON_READ_SUCCESS);
@@ -1223,6 +1254,10 @@ LUALIB_API int luaopen_yyjson_doc(lua_State *L)
     /** Adds a newline character `\n` at the end of the JSON.
         This can be helpful for text editors or NDJSON. */
     lauxh_pushint2tbl(L, "WRITE_NEWLINE_AT_END", YYJSON_WRITE_NEWLINE_AT_END);
+
+    /** Write floating-point numbers using single-precision (float) instead of
+        double-precision. Can produce shorter output for values that fit. */
+    lauxh_pushint2tbl(L, "WRITE_FP_TO_FLOAT", YYJSON_WRITE_FP_TO_FLOAT);
 
     /** Result code for JSON writer */
     /** Success, no error. */
